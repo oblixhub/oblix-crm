@@ -84,6 +84,9 @@ const toDbPatch = (lead: Lead) => ({
 });
 
 export default function App() {
+  const devPreview =
+    import.meta.env.DEV &&
+    new URLSearchParams(window.location.search).has("preview");
   const [leads, setLeads] = useState<Lead[]>(() => initialLeads);
   const [authReady, setAuthReady] = useState(!supabaseConfigured);
   const [session, setSession] = useState<Awaited<ReturnType<NonNullable<typeof supabase>["auth"]["getSession"]>>["data"]["session"]>(null);
@@ -97,7 +100,7 @@ export default function App() {
   const [toast, setToast] = useState<string | null>(null);
   const [theme, setTheme] = useState<"light" | "dark">(() => {
     const saved = window.localStorage.getItem("oblix-theme");
-    return saved === "dark" ? "dark" : "light";
+    return saved === "light" ? "light" : "dark";
   });
   const toastTimeoutRef = useRef<number | null>(null);
 
@@ -457,10 +460,10 @@ export default function App() {
     );
   };
 
-  if (supabaseConfigured && !authReady) {
+  if (supabaseConfigured && !authReady && !devPreview) {
     return <div className="auth-screen"><div className="auth-card"><strong>OBLIX CRM</strong><p>Verificando sua sessão segura…</p></div></div>;
   }
-  if (supabaseConfigured && !session) {
+  if (supabaseConfigured && !session && !devPreview) {
     return <LoginScreen />;
   }
   if (backendLoading) {

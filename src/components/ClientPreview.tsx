@@ -14,48 +14,54 @@ export function ClientPreview({
 }: ClientPreviewProps) {
   return (
     <div className="client-preview">
-      <header className="client-preview-bar">
-        <div>
-          <LockKeyhole size={17} />
-          Acesso protegido
-        </div>
-        <span>Versão {lead.preview.version ?? 1}</span>
-      </header>
-      <div className="preview-browser">
-        <div className="preview-browser-bar">
-          <span />
-          <span />
-          <span />
-          <small>sites.oblixhub.com/{lead.preview.publicSlug}</small>
-        </div>
-        <div className="sample-site">
-          <nav>
-            <strong>{lead.category}</strong>
-            <span>Início &nbsp; Serviços &nbsp; Contato</span>
-          </nav>
-          <div>
-            <h2>Um site claro para apresentar seu trabalho</h2>
-            <p>
-              Área de demonstração do preview enviado para {lead.handle}.
-            </p>
-            <button>Falar no WhatsApp</button>
-          </div>
-        </div>
+      <div className="client-preview-security">
+        <LockKeyhole size={15} />
+        Preview protegido · versão {lead.preview.version ?? 1}
       </div>
-      <footer className="client-approval-bar">
+
+      <div className="sample-site client-site-preview">
+        <nav>
+          <strong>{lead.category}</strong>
+          <span>Início &nbsp; Serviços &nbsp; Contato</span>
+        </nav>
         <div>
-          <strong>Este preview está pronto para sua avaliação.</strong>
-          <span>A aprovação fica vinculada a esta versão.</span>
+          <span className="sample-site-kicker">Atendimento profissional</span>
+          <h2>Um site claro para apresentar seu trabalho</h2>
+          <p>
+            Conheça os serviços, tire suas dúvidas e fale diretamente pelo
+            WhatsApp.
+          </p>
+          <button>Falar no WhatsApp</button>
         </div>
-        <button className="button button--secondary" onClick={onRequestChanges}>
-          <MessageSquareText size={18} />
-          Solicitar ajustes
-        </button>
-        <button className="button button--primary" onClick={onApprove}>
-          <BadgeCheck size={18} />
-          Aprovar esta versão
-        </button>
-      </footer>
+        <section className="sample-site-services">
+          <article>
+            <strong>Atendimento personalizado</strong>
+            <p>Uma experiência pensada para cada necessidade.</p>
+          </article>
+          <article>
+            <strong>Contato fácil</strong>
+            <p>Informações objetivas e acesso rápido ao WhatsApp.</p>
+          </article>
+          <article>
+            <strong>Apresentação profissional</strong>
+            <p>Serviços organizados para facilitar a decisão.</p>
+          </article>
+        </section>
+      </div>
+
+      <aside className="client-review-widget" aria-label="Avaliação do site">
+        <span>O que achou do site?</span>
+        <div>
+          <button className="review-change-button" onClick={onRequestChanges}>
+            <MessageSquareText size={19} />
+            <span>Pedir revisão</span>
+          </button>
+          <button className="review-approve-button" onClick={onApprove}>
+            <BadgeCheck size={20} />
+            <span>Aprovar site</span>
+          </button>
+        </div>
+      </aside>
     </div>
   );
 }

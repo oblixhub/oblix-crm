@@ -7,7 +7,6 @@ import {
   CheckSquare2,
   ChevronDown,
   Clock3,
-  Flag,
   Import,
   ListFilter,
   Plus,
@@ -15,10 +14,9 @@ import {
   UserRoundCog,
   UsersRound,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useDeferredValue, useMemo, useState } from "react";
 import type { Lead, Owner, Priority, Stage, WeekDay } from "../types";
-import { ContactActions } from "./ContactActions";
-import { StageBadge } from "./StageBadge";
+import { LeadCard, ownerName } from "./LeadCard";
 
 type DayFilter = WeekDay | "Atrasados" | "Todos";
 
@@ -65,6 +63,7 @@ export function Dashboard({
 }: DashboardProps) {
   const [activeDay, setActiveDay] = useState<DayFilter>("Hoje");
   const [query, setQuery] = useState("");
+  const deferredQuery = useDeferredValue(query);
   const [owner, setOwner] = useState<Owner | "Todos">("Todos");
   const [stage, setStage] = useState<Stage | "Todos">("Todos");
   const [priority, setPriority] = useState<Priority | "Todas">("Todas");
@@ -90,7 +89,7 @@ export function Dashboard({
   }, [leads]);
 
   const filteredLeads = useMemo(() => {
-    const normalized = query.trim().toLowerCase();
+    const normalized = deferredQuery.trim().toLowerCase();
     return leads
       .filter((lead) => {
         const dayMatches =
@@ -117,30 +116,37 @@ export function Dashboard({
           priorityWeight[a.priority] - priorityWeight[b.priority] ||
           a.dueTime.localeCompare(b.dueTime),
       );
-  }, [activeDay, leads, owner, priority, query, stage]);
+  }, [activeDay, deferredQuery, leads, owner, priority, stage]);
 
-  const pageSize = 20;
+  const pageSize = 24;
   const totalPages = Math.max(1, Math.ceil(filteredLeads.length / pageSize));
   const safePage = Math.min(page, totalPages);
   const visibleLeads = filteredLeads.slice(
     (safePage - 1) * pageSize,
     safePage * pageSize,
   );
-
-  const selectAllVisible = (checked: boolean) => {
-    setSelectedIds((current) => {
-      const next = new Set(current);
-      visibleLeads.forEach((lead) =>
-        checked ? next.add(lead.id) : next.delete(lead.id),
-      );
-      return next;
-    });
-  };
-
+  const nextLead = filteredLeads[0];
   const selected = [...selectedIds];
-  const allVisibleSelected =
-    visibleLeads.length > 0 &&
-    visibleLeads.every((lead) => selectedIds.has(lead.id));
+  const selectedVisibleCount = visibleLeads.filter((lead) =>
+    selectedIds.has(lead.id),
+  ).length;
+
+  const team = [
+    {
+      name: "Hugo",
+      total: leads.filter((lead) => lead.owner === "Você").length,
+      today: leads.filter(
+        (lead) => lead.owner === "Você" && lead.scheduleDay === "Hoje",
+      ).length,
+    },
+    {
+      name: "Raiza",
+      total: leads.filter((lead) => lead.owner === "Sócia").length,
+      today: leads.filter(
+        (lead) => lead.owner === "Sócia" && lead.scheduleDay === "Hoje",
+      ).length,
+    },
+  ];
 
   const clearFilters = () => {
     setQuery("");
@@ -150,67 +156,143 @@ export function Dashboard({
     setPage(1);
   };
 
+  const toggleVisible = () => {
+    const shouldSelect = selectedVisibleCount !== visibleLeads.length;
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      visibleLeads.forEach((lead) =>
+        shouldSelect ? next.add(lead.id) : next.delete(lead.id),
+      );
+      return next;
+    });
+  };
+
   return (
     <div className="operations-page">
       <header className="operations-header">
         <div>
-          <h1>Operação da semana</h1>
+          <span className="page-eyebrow">Central de trabalho</span>
+          <h1>Fila de hoje</h1>
+          <p>Veja o que precisa de atenção e avance um contato por vez.</p>
         </div>
         <div className="week-switcher" aria-label="Semana atual">
           <button aria-label="Semana anterior">
-            <ArrowLeft size={17} />
+            <ArrowLeft size={18} />
           </button>
           <span>
-            <CalendarRange size={17} />
-            20–24 jul
+            <CalendarRange size={18} />
+            Semana atual
           </span>
           <button aria-label="Próxima semana">
-            <ArrowRight size={17} />
+            <ArrowRight size={18} />
           </button>
         </div>
         <div className="operations-heading-actions">
           <button className="button button--primary" onClick={onNewLead}>
-            <Plus size={18} />
+            <Plus size={19} />
             Novo lead
           </button>
           <button className="button button--secondary" onClick={onImport}>
-            <Import size={18} />
+            <Import size={19} />
             Importar
           </button>
         </div>
       </header>
 
+      {nextLead ? (
+        <section className="next-action-focus">
+          <div className="next-action-icon">
+            <ArrowRight size={25} />
+          </div>
+          <div className="next-action-copy">
+            <span>Próxima ação recomendada</span>
+            <strong>{nextLead.nextAction}</strong>
+            <small>
+              {nextLead.handle} · {ownerName(nextLead.owner)}
+              {nextLead.overdue ? " · Está atrasado" : ` · ${nextLead.dueTime}`}
+            </small>
+          </div>
+          <button
+            className="button button--primary"
+            onClick={() => onSelectLead(nextLead.id)}
+          >
+            Abrir lead
+            <ArrowRight size={18} />
+          </button>
+        </section>
+      ) : (
+        <section className="next-action-focus is-empty">
+          <CheckSquare2 size={24} />
+          <div>
+            <strong>Fila concluída</strong>
+            <small>Não há ações pendentes neste filtro.</small>
+          </div>
+        </section>
+      )}
+
+      <section className="team-workload" aria-label="Carga da equipe">
+        <div className="team-workload-title">
+          <UsersRound size={20} />
+          <span>
+            <strong>Equipe</strong>
+            <small>Distribuição visível evita sobrecarga.</small>
+          </span>
+        </div>
+        {team.map((member) => (
+          <div className="team-member-load" key={member.name}>
+            <i>{member.name.slice(0, 1)}</i>
+            <span>
+              <strong>{member.name}</strong>
+              <small>
+                {member.today} hoje · {member.total} ativos
+              </small>
+            </span>
+          </div>
+        ))}
+        <div className="team-member-load is-future">
+          <Plus size={18} />
+          <span>
+            <strong>Próximo vendedor</strong>
+            <small>Capacidade pronta para crescer</small>
+          </span>
+        </div>
+      </section>
+
       <section className="operations-summary" aria-label="Resumo operacional">
         <SummaryItem
-          icon={UsersRound}
-          value="400"
-          label="ativos no mês"
-          tone="green"
-        />
-        <SummaryItem
           icon={Clock3}
-          value={String(leads.length)}
-          label="na fila da semana"
+          value={String(counts.Hoje)}
+          label="ações para hoje"
           tone="blue"
         />
         <SummaryItem
           icon={AlertCircle}
           value={String(counts.Atrasados)}
-          label="atrasados"
+          label="atrasadas"
           tone="amber"
         />
         <SummaryItem
           icon={CalendarDays}
-          value={String(
-            leads.filter((lead) => lead.nextAction === "Definir próxima ação")
-              .length,
-          )}
-          label="sem próxima ação"
+          value={String(leads.length)}
+          label="leads ativos"
           tone="purple"
         />
       </section>
 
       <section className="weekly-queue">
+        <div className="queue-section-heading">
+          <div>
+            <h2>Fila completa</h2>
+            <p>{filteredLeads.length} contatos nesta visualização</p>
+          </div>
+          <button className="button button--quiet select-visible" onClick={toggleVisible}>
+            <CheckSquare2 size={18} />
+            {selectedVisibleCount === visibleLeads.length && visibleLeads.length
+              ? "Desmarcar página"
+              : "Selecionar página"}
+          </button>
+        </div>
+
         <div className="week-tabs" role="tablist" aria-label="Dias da semana">
           {dayOrder.map((day) => (
             <button
@@ -231,69 +313,75 @@ export function Dashboard({
           ))}
         </div>
 
-        <div className="queue-filterbar">
-          <label className="search-field weekly-search">
-            <Search size={17} />
-            <input
-              value={query}
-              onChange={(event) => {
-                setQuery(event.target.value);
-                setPage(1);
-              }}
-              placeholder="Buscar lead, segmento ou ação..."
+        <details className="queue-filters" open>
+          <summary>
+            <ListFilter size={18} />
+            Buscar e filtrar
+            <ChevronDown size={17} />
+          </summary>
+          <div className="queue-filterbar">
+            <label className="search-field weekly-search">
+              <Search size={18} />
+              <input
+                value={query}
+                onChange={(event) => {
+                  setQuery(event.target.value);
+                  setPage(1);
+                }}
+                placeholder="Buscar perfil, segmento ou ação..."
+              />
+            </label>
+            <FilterSelect
+              label="Responsável"
+              value={owner}
+              onChange={(value) => setOwner(value as Owner | "Todos")}
+              options={["Todos", "Você", "Sócia"]}
             />
-          </label>
-          <FilterSelect
-            label="Responsável"
-            value={owner}
-            onChange={(value) => setOwner(value as Owner | "Todos")}
-            options={["Todos", "Você", "Sócia"]}
-          />
-          <FilterSelect
-            label="Etapa"
-            value={stage}
-            onChange={(value) => setStage(value as Stage | "Todos")}
-            options={[
-              "Todos",
-              "Validar",
-              "Contatar",
-              "Interessado",
-              "Materiais",
-              "Preview",
-              "Aprovação",
-              "Pagamento",
-            ]}
-          />
-          <FilterSelect
-            label="Prioridade"
-            value={priority}
-            onChange={(value) => setPriority(value as Priority | "Todas")}
-            options={["Todas", "Urgente", "Alta", "Normal", "Baixa"]}
-          />
-          <button className="button button--quiet clear-filter" onClick={clearFilters}>
-            <ListFilter size={17} />
-            Limpar
-          </button>
-        </div>
+            <FilterSelect
+              label="Etapa"
+              value={stage}
+              onChange={(value) => setStage(value as Stage | "Todos")}
+              options={[
+                "Todos",
+                "Validar",
+                "Contatar",
+                "Interessado",
+                "Materiais",
+                "Preview",
+                "Aprovação",
+                "Pagamento",
+              ]}
+            />
+            <FilterSelect
+              label="Prioridade"
+              value={priority}
+              onChange={(value) => setPriority(value as Priority | "Todas")}
+              options={["Todas", "Urgente", "Alta", "Normal", "Baixa"]}
+            />
+            <button className="button button--quiet clear-filter" onClick={clearFilters}>
+              Limpar filtros
+            </button>
+          </div>
+        </details>
 
         {selectedIds.size > 0 && (
           <div className="bulk-toolbar">
             <span>
-              <CheckSquare2 size={18} />
+              <CheckSquare2 size={19} />
               <strong>{selectedIds.size}</strong> selecionados
             </span>
             <i />
             <button onClick={() => onBulkOwner(selected, "Sócia")}>
-              <UserRoundCog size={17} />
-              Passar para sócia
+              <UserRoundCog size={18} />
+              Passar para Raiza
             </button>
             <button onClick={() => onBulkStage(selected, "Contatar")}>
-              <ArrowRight size={17} />
+              <ArrowRight size={18} />
               Mover para Contatar
             </button>
             <button onClick={() => onBulkSchedule(selected, "Ter")}>
-              <CalendarDays size={17} />
-              Reagendar para terça
+              <CalendarDays size={18} />
+              Reagendar
             </button>
             <button
               className="bulk-clear"
@@ -304,114 +392,27 @@ export function Dashboard({
           </div>
         )}
 
-        <div className="weekly-table-scroll">
-          <table className="weekly-table">
-            <thead>
-              <tr>
-                <th>
-                  <input
-                    type="checkbox"
-                    aria-label="Selecionar leads visíveis"
-                    checked={allVisibleSelected}
-                    onChange={(event) => selectAllVisible(event.target.checked)}
-                  />
-                </th>
-                <th>Prioridade</th>
-                <th>Lead</th>
-                <th>Responsável</th>
-                <th>Etapa</th>
-                <th>Próxima ação</th>
-                <th>Agendado</th>
-                <th>Contato</th>
-              </tr>
-            </thead>
-            <tbody>
-              {visibleLeads.map((lead) => (
-                <tr
-                  key={lead.id}
-                  className={`${selectedIds.has(lead.id) ? "selected" : ""} ${
-                    lead.overdue ? "overdue" : ""
-                  }`}
-                  onClick={() => onSelectLead(lead.id)}
-                >
-                  <td onClick={(event) => event.stopPropagation()}>
-                    <input
-                      type="checkbox"
-                      aria-label={`Selecionar ${lead.handle}`}
-                      checked={selectedIds.has(lead.id)}
-                      onChange={(event) =>
-                        setSelectedIds((current) => {
-                          const next = new Set(current);
-                          event.target.checked
-                            ? next.add(lead.id)
-                            : next.delete(lead.id);
-                          return next;
-                        })
-                      }
-                    />
-                  </td>
-                  <td>
-                    <PriorityControl
-                      priority={lead.priority}
-                      onChange={(next) => onPriorityChange(lead.id, next)}
-                    />
-                  </td>
-                  <td>
-                    <span className="weekly-lead">
-                      <i>{lead.handle.slice(1, 3).toUpperCase()}</i>
-                      <span>
-                        <strong>{lead.handle}</strong>
-                        <small>{lead.category}</small>
-                      </span>
-                    </span>
-                  </td>
-                  <td>
-                    <span className="weekly-owner">
-                      <i className={lead.owner === "Você" ? "primary" : ""}>
-                        {lead.owner === "Você" ? "V" : "S"}
-                      </i>
-                      {lead.owner}
-                    </span>
-                  </td>
-                  <td>
-                    <StageBadge stage={lead.stage} />
-                  </td>
-                  <td>
-                    <span
-                      className={`weekly-next-action ${
-                        lead.nextAction === "Definir próxima ação"
-                          ? "missing"
-                          : ""
-                      }`}
-                    >
-                      <ArrowRight size={16} />
-                      <strong>{lead.nextAction}</strong>
-                    </span>
-                  </td>
-                  <td>
-                    <span
-                      className={`weekly-schedule ${
-                        lead.overdue ? "danger" : ""
-                      }`}
-                    >
-                      {lead.overdue ? "Atrasado" : lead.scheduleDay},{" "}
-                      {lead.dueTime}
-                    </span>
-                  </td>
-                  <td>
-                    <ContactActions
-                      lead={lead}
-                      compact
-                      onOpenMessages={() => onOpenMessages(lead.id)}
-                    />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="lead-card-list">
+          {visibleLeads.map((lead) => (
+            <LeadCard
+              key={lead.id}
+              lead={lead}
+              selected={selectedIds.has(lead.id)}
+              onSelect={() => onSelectLead(lead.id)}
+              onOpenMessages={() => onOpenMessages(lead.id)}
+              onPriorityChange={(next) => onPriorityChange(lead.id, next)}
+              onSelectionChange={(checked) =>
+                setSelectedIds((current) => {
+                  const next = new Set(current);
+                  checked ? next.add(lead.id) : next.delete(lead.id);
+                  return next;
+                })
+              }
+            />
+          ))}
           {visibleLeads.length === 0 && (
             <div className="weekly-empty">
-              <Search size={23} />
+              <Search size={25} />
               <strong>Nenhum lead nesta visualização</strong>
               <p>Ajuste os filtros ou escolha outro dia da semana.</p>
               <button className="button button--secondary" onClick={clearFilters}>
@@ -423,7 +424,6 @@ export function Dashboard({
 
         <footer className="weekly-footer">
           <span>
-            Mostrando{" "}
             {filteredLeads.length === 0 ? 0 : (safePage - 1) * pageSize + 1}–
             {Math.min(safePage * pageSize, filteredLeads.length)} de{" "}
             {filteredLeads.length}
@@ -436,7 +436,7 @@ export function Dashboard({
               Anterior
             </button>
             <span>
-              Página {safePage} de {totalPages}
+              {safePage} de {totalPages}
             </span>
             <button
               disabled={safePage === totalPages}
@@ -467,7 +467,7 @@ function SummaryItem({
   return (
     <div className="summary-item">
       <i className={`summary-icon tone-${tone}`}>
-        <Icon size={21} />
+        <Icon size={22} />
       </i>
       <span>
         <strong>{value}</strong>
@@ -497,35 +497,8 @@ function FilterSelect({
             <option key={option}>{option}</option>
           ))}
         </select>
-        <ChevronDown size={15} />
+        <ChevronDown size={16} />
       </span>
-    </label>
-  );
-}
-
-function PriorityControl({
-  priority,
-  onChange,
-}: {
-  priority: Priority;
-  onChange: (priority: Priority) => void;
-}) {
-  const priorities: Priority[] = ["Urgente", "Alta", "Normal", "Baixa"];
-  return (
-    <label
-      className={`priority-control priority-${priority.toLowerCase()}`}
-      onClick={(event) => event.stopPropagation()}
-    >
-      <Flag size={14} fill="currentColor" />
-      <select
-        aria-label={`Prioridade ${priority}`}
-        value={priority}
-        onChange={(event) => onChange(event.target.value as Priority)}
-      >
-        {priorities.map((item) => (
-          <option key={item}>{item}</option>
-        ))}
-      </select>
     </label>
   );
 }

@@ -22,13 +22,19 @@ const navItems: Array<{
   label: string;
   icon: typeof Home;
 }> = [
-  { key: "dashboard", label: "Visão geral", icon: Home },
+  { key: "dashboard", label: "Hoje", icon: Home },
   { key: "prospecting", label: "Prospecção", icon: Search },
   { key: "leads", label: "Leads", icon: Users },
   { key: "previews", label: "Previews", icon: Eye },
   { key: "finance", label: "Financeiro", icon: CircleDollarSign },
   { key: "messages", label: "Mensagens", icon: MessageSquareText },
 ];
+
+const mobileNavItems = navItems.filter((item) =>
+  ["dashboard", "prospecting", "leads", "previews", "messages"].includes(
+    item.key,
+  ),
+);
 
 interface AppShellProps {
   active: NavKey;
@@ -122,6 +128,10 @@ export function AppShell({
           >
             <Menu size={22} />
           </button>
+          <div className="mobile-brand">
+            <span>O</span>
+            <strong>OBLIX CRM</strong>
+          </div>
           <div className="topbar-spacer" />
           <button
             className="topbar-theme-toggle"
@@ -139,6 +149,21 @@ export function AppShell({
           </button>
         </header>
         <main className="app-main">{children}</main>
+        <nav className="mobile-bottom-nav" aria-label="Atalhos principais">
+          {mobileNavItems.map((item) => {
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.key}
+                className={active === item.key ? "active" : ""}
+                onClick={() => navigate(item.key)}
+              >
+                <Icon size={21} strokeWidth={1.9} />
+                <span>{item.key === "messages" ? "Mais" : item.label}</span>
+              </button>
+            );
+          })}
+        </nav>
       </div>
     </div>
   );
