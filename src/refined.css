@@ -2313,3 +2313,27 @@ textarea {
     grid-template-columns: 1fr;
   }
 }
+ .auth-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: radial-gradient(circle at top right, rgba(111, 97, 255, 0.18), transparent 42%), #101018;
+  color: #f7f7fb;
+}
+
+.auth-card {
+  width: min(100%, 420px);
+  display: grid;
+  gap: 16px;
+  padding: 36px;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 24px;
+  background: rgba(25,25,36,0.92);
+  box-shadow: 0 24px 80px rgba(0,0,0,0.3);
+}
+.auth-card h1 { margin: 0; font-size: 32px; }
+.auth-card p { margin: -8px 0 8px; color: #aaaabd; }
+.auth-card small { color: #8c8c9e; line-height: 1.5; }
+.auth-mark { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 13px; background: #8b7cff; color: #fff; font-weight: 800; font-size: 22px; }
+.auth-error { padding: 10px 12px; border-radius: 10px; background: rgba(239, 101, 101, 0.14); color: #ffb2b2; font-size: 13px; }

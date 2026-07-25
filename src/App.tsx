@@ -12,6 +12,7 @@ import { Modal } from "./components/Modal";
 import { PreviewHub } from "./components/PreviewHub";
 import { ProspectingBoard } from "./components/ProspectingBoard";
 import { initialLeads, initialTemplates } from "./data";
+import { supabase, supabaseConfigured } from "./lib/supabase";
 import type {
   Activity,
   Lead,
@@ -37,8 +38,56 @@ const nowLabel = () =>
     minute: "2-digit",
   }).format(new Date());
 
+type DbLead = {
+  id: string;
+  handle: string;
+  full_name: string | null;
+  profile_url: string;
+  priority_marked: boolean;
+  segment: string | null;
+  stage: string;
+  site_status: string | null;
+  offer_suggestion: string | null;
+  has_whatsapp: boolean;
+  validation_status: "pending" | "valid" | "discarded";
+  professional_evidence: string | null;
+  owner: string | null;
+  notes: string | null;
+};
+
+const mapDbLead = (row: DbLead, index: number): Lead => ({
+  id: index + 1,
+  remoteId: row.id,
+  handle: row.handle,
+  category: row.segment ?? "A classificar",
+  owner: row.owner === "Sócia" ? "Sócia" : "Você",
+  stage: (row.validation_status === "pending" ? "Validar" : row.stage) as Stage,
+  nextAction: row.validation_status === "pending" ? "Abrir perfil e validar" : "Definir próxima ação",
+  priority: row.priority_marked ? "Alta" : "Normal",
+  scheduleDay: "Hoje",
+  dueTime: "A definir",
+  siteStatus: row.site_status === "Tem site" ? "Tem site" : row.site_status === "Sem site" ? "Sem site" : "Não verificado",
+  instagramUrl: row.profile_url,
+  whatsappUrl: row.has_whatsapp ? undefined : undefined,
+  offer: row.offer_suggestion?.toLowerCase().includes("domínio") ? "Com domínio" : "Sem domínio",
+  amount: row.offer_suggestion?.toLowerCase().includes("domínio") ? 250 : 200,
+  paymentStatus: "Não aprovado",
+  activities: [{ id: index + 1, kind: "validation", title: "Importado do Excel", detail: row.professional_evidence ?? "Aguardando validação manual do perfil.", time: "Importado agora", author: "Sistema" }],
+  preview: { status: "none", publicSlug: row.handle.replace(/^@/, ""), checklist: { index: false, relativePaths: false, protectedAccess: false } },
+});
+
+const toDbPatch = (lead: Lead) => ({
+  priority_marked: lead.priority === "Urgente" || lead.priority === "Alta",
+  stage: lead.stage,
+  owner: lead.owner,
+  updated_at: new Date().toISOString(),
+});
+
 export default function App() {
   const [leads, setLeads] = useState<Lead[]>(() => initialLeads);
+  const [authReady, setAuthReady] = useState(!supabaseConfigured);
+  const [session, setSession] = useState<Awaited<ReturnType<NonNullable<typeof supabase>["auth"]["getSession"]>>["data"]["session"]>(null);
+  const [backendLoading, setBackendLoading] = useState(Boolean(supabaseConfigured));
   const [templates, setTemplates] = useState<MessageTemplate[]>(
     () => initialTemplates,
   );
@@ -51,6 +100,48 @@ export default function App() {
     return saved === "dark" ? "dark" : "light";
   });
   const toastTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!supabase) return;
+    let active = true;
+    void supabase.auth.getSession().then(({ data }) => {
+      if (!active) return;
+      setSession(data.session);
+      setAuthReady(true);
+      if (!data.session) setBackendLoading(false);
+    });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, next) => {
+      setSession(next);
+      setAuthReady(true);
+      if (!next) setBackendLoading(false);
+    });
+    return () => {
+      active = false;
+      listener.subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!supabase || !session) return;
+    let active = true;
+    setBackendLoading(true);
+    void supabase
+      .from("leads")
+      .select("*")
+      .order("priority_marked", { ascending: false })
+      .order("created_at", { ascending: true })
+      .then(({ data, error }) => {
+        if (!active) return;
+        if (!error && data) {
+          setLeads(data.map((row, index) => mapDbLead(row as DbLead, index)));
+        }
+        setBackendLoading(false);
+        if (error) showToast(`Não foi possível carregar os leads: ${error.message}`);
+      });
+    return () => {
+      active = false;
+    };
+  }, [session]);
 
   const selectedLead = useMemo(
     () => leads.find((lead) => lead.id === selectedLeadId) ?? null,
@@ -84,9 +175,14 @@ export default function App() {
   };
 
   const updateLead = (leadId: number, updater: (lead: Lead) => Lead) => {
-    setLeads((current) =>
-      current.map((lead) => (lead.id === leadId ? updater(lead) : lead)),
-    );
+    setLeads((current) => {
+      const next = current.map((lead) => (lead.id === leadId ? updater(lead) : lead));
+      const changed = next.find((lead) => lead.id === leadId);
+      if (supabase && session && changed?.remoteId) {
+        void supabase.from("leads").update(toDbPatch(changed)).eq("id", changed.remoteId);
+      }
+      return next;
+    });
   };
 
   const addActivity = (
@@ -360,6 +456,16 @@ export default function App() {
       ),
     );
   };
+
+  if (supabaseConfigured && !authReady) {
+    return <div className="auth-screen"><div className="auth-card"><strong>OBLIX CRM</strong><p>Verificando sua sessão segura…</p></div></div>;
+  }
+  if (supabaseConfigured && !session) {
+    return <LoginScreen />;
+  }
+  if (backendLoading) {
+    return <div className="auth-screen"><div className="auth-card"><strong>OBLIX CRM</strong><p>Carregando sua fila de leads…</p></div></div>;
+  }
 
   let content;
   if (selectedLead) {
@@ -676,5 +782,38 @@ function ImportFlow({
         </button>
       </div>
     </div>
+  );
+}
+
+function LoginScreen() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!supabase) return;
+    setLoading(true);
+    setError(null);
+    const { error: signInError } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    if (signInError) setError("E-mail ou senha inválidos. Confirme o usuário criado no Supabase.");
+    setLoading(false);
+  };
+
+  return (
+    <main className="auth-screen">
+      <form className="auth-card" onSubmit={submit}>
+        <div className="auth-mark">O</div>
+        <span className="eyebrow">STUDIO OBLIX</span>
+        <h1>Entrar no CRM</h1>
+        <p>Acompanhe a fila de validação e a prospecção da dupla.</p>
+        <label className="field"><span>E-mail</span><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="voce@oblix.com" required /></label>
+        <label className="field"><span>Senha</span><input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required /></label>
+        {error && <div className="auth-error">{error}</div>}
+        <button className="button button--primary" disabled={loading}>{loading ? "Entrando…" : "Entrar"}</button>
+        <small>Usuários e senhas são criados em Authentication → Users no Supabase.</small>
+      </form>
+    </main>
   );
 }

@@ -61,6 +61,7 @@ export interface PreviewState {
 
 export interface Lead {
   id: number;
+  remoteId?: string;
   handle: string;
   category: string;
   owner: Owner;
