@@ -2337,3 +2337,8 @@ textarea {
 .auth-card small { color: #8c8c9e; line-height: 1.5; }
 .auth-mark { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 13px; background: #8b7cff; color: #fff; font-weight: 800; font-size: 22px; }
 .auth-error { padding: 10px 12px; border-radius: 10px; background: rgba(239, 101, 101, 0.14); color: #ffb2b2; font-size: 13px; }
+.password-field { position: relative; }
+.password-field input { width: 100%; padding-right: 44px; }
+.password-toggle { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); display: grid; place-items: center; border: 0; background: transparent; color: #aaaabd; cursor: pointer; padding: 8px; }
+.remember-access { display: flex; align-items: center; gap: 9px; color: #c6c6d2; font-size: 13px; cursor: pointer; }
+.remember-access input { accent-color: #8b7cff; }

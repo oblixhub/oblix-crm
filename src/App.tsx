@@ -1,4 +1,4 @@
-import { FileSpreadsheet, Plus, UploadCloud } from "lucide-react";
+import { Eye, EyeOff, FileSpreadsheet, Plus, UploadCloud } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { AppShell } from "./components/AppShell";
 import { ClientPreview } from "./components/ClientPreview";
@@ -786,8 +786,10 @@ function ImportFlow({
 }
 
 function LoginScreen() {
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(() => window.localStorage.getItem("oblix-login-email") ?? "");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberAccess, setRememberAccess] = useState(() => window.localStorage.getItem("oblix-remember-access") === "true");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -796,6 +798,13 @@ function LoginScreen() {
     if (!supabase) return;
     setLoading(true);
     setError(null);
+    if (rememberAccess) {
+      window.localStorage.setItem("oblix-login-email", email.trim());
+      window.localStorage.setItem("oblix-remember-access", "true");
+    } else {
+      window.localStorage.removeItem("oblix-login-email");
+      window.localStorage.removeItem("oblix-remember-access");
+    }
     const { error: signInError } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
     if (signInError) setError("E-mail ou senha inválidos. Confirme o usuário criado no Supabase.");
     setLoading(false);
@@ -809,10 +818,11 @@ function LoginScreen() {
         <h1>Entrar no CRM</h1>
         <p>Acompanhe a fila de validação e a prospecção da dupla.</p>
         <label className="field"><span>E-mail</span><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="voce@oblix.com" required /></label>
-        <label className="field"><span>Senha</span><input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required /></label>
+        <label className="field"><span>Senha</span><div className="password-field"><input type={showPassword ? "text" : "password"} value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" required /><button type="button" className="password-toggle" aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"} onClick={() => setShowPassword((visible) => !visible)}>{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button></div></label>
+        <label className="remember-access"><input type="checkbox" checked={rememberAccess} onChange={(event) => setRememberAccess(event.target.checked)} /><span>Manter acesso neste dispositivo</span></label>
         {error && <div className="auth-error">{error}</div>}
         <button className="button button--primary" disabled={loading}>{loading ? "Entrando…" : "Entrar"}</button>
-        <small>Usuários e senhas são criados em Authentication → Users no Supabase.</small>
+        <small>O acesso fica salvo pelo Supabase com segurança. A senha nunca é gravada pelo CRM.</small>
       </form>
     </main>
   );
