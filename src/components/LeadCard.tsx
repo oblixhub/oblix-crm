@@ -18,6 +18,33 @@ export function ownerName(owner: Lead["owner"]) {
   return owner === "Você" ? "Hugo" : "Raiza";
 }
 
+function leadInitials(handle: string) {
+  const parts = handle
+    .replace(/^@/, "")
+    .split(/[._-]+/)
+    .filter((part) => /[a-zÀ-ÿ]/i.test(part));
+
+  if (parts.length > 1) {
+    return `${parts[0][0]}${parts.at(-1)?.[0] ?? ""}`.toUpperCase();
+  }
+
+  return (parts[0] ?? "?").slice(0, 2).toUpperCase();
+}
+
+function stageClass(stage: Lead["stage"]) {
+  const classes: Record<Lead["stage"], string> = {
+    Validar: "validar",
+    Contatar: "contatar",
+    Interessado: "interessado",
+    Materiais: "materiais",
+    Preview: "preview",
+    Aprovação: "aprovacao",
+    Pagamento: "pagamento",
+  };
+
+  return classes[stage];
+}
+
 export function LeadCard({
   lead,
   onSelect,
@@ -26,13 +53,13 @@ export function LeadCard({
   selected = false,
   onSelectionChange,
 }: LeadCardProps) {
-  const initials = lead.handle.replace("@", "").slice(0, 2).toUpperCase();
+  const initials = leadInitials(lead.handle);
 
   return (
     <article
-      className={`lead-card ${selected ? "is-selected" : ""} ${
-        lead.overdue ? "is-overdue" : ""
-      }`}
+      className={`lead-card lead-card--stage-${stageClass(lead.stage)} ${
+        selected ? "is-selected" : ""
+      } ${lead.overdue ? "is-overdue" : ""}`}
     >
       {onSelectionChange && (
         <label

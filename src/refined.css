@@ -2648,6 +2648,7 @@ textarea {
 }
 
 .lead-card {
+  --lead-stage: var(--app-muted);
   position: relative;
   min-width: 0;
   overflow: hidden;
@@ -2658,6 +2659,34 @@ textarea {
   content-visibility: auto;
   contain-intrinsic-size: 190px;
   transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+
+.lead-card--stage-validar {
+  --lead-stage: var(--app-blue);
+}
+
+.lead-card--stage-contatar {
+  --lead-stage: var(--app-green);
+}
+
+.lead-card--stage-interessado {
+  --lead-stage: var(--app-amber);
+}
+
+.lead-card--stage-materiais {
+  --lead-stage: var(--app-purple);
+}
+
+.lead-card--stage-preview {
+  --lead-stage: #9d6df2;
+}
+
+.lead-card--stage-aprovacao {
+  --lead-stage: #2ebf88;
+}
+
+.lead-card--stage-pagamento {
+  --lead-stage: #22a6b8;
 }
 
 .lead-card:hover {
@@ -2729,9 +2758,10 @@ textarea {
   height: 39px;
   flex: 0 0 39px;
   place-items: center;
+  border: 2px solid color-mix(in srgb, var(--lead-stage) 68%, transparent);
   border-radius: 12px;
-  background: var(--app-green-soft);
-  color: var(--app-green);
+  background: color-mix(in srgb, var(--lead-stage) 18%, var(--app-surface));
+  color: var(--lead-stage);
   font-size: 13px;
   font-weight: 800;
 }
