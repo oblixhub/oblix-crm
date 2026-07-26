@@ -79,7 +79,6 @@ export function LeadDirectory({
           }}
         >
           <option>Todas</option>
-          <option>Validar</option>
           <option>Contatar</option>
           <option>Interessado</option>
           <option>Materiais</option>

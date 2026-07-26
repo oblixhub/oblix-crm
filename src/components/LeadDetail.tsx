@@ -51,7 +51,11 @@ export function LeadDetail({
   onOpenMessages,
 }: LeadDetailProps) {
   const [note, setNote] = useState("");
-  const currentIndex = stages.indexOf(lead.stage);
+  const visibleStages: readonly Stage[] =
+    lead.validationStatus === "pending"
+      ? stages
+      : stages.filter((stage) => stage !== "Validar");
+  const currentIndex = visibleStages.indexOf(lead.stage);
 
   const sortedActivities = useMemo(
     () => [...lead.activities].reverse(),
@@ -87,7 +91,7 @@ export function LeadDetail({
             value={lead.stage}
             onChange={(event) => onStageChange(event.target.value as Stage)}
           >
-            {stages.map((stage) => (
+            {visibleStages.map((stage) => (
               <option key={stage}>{stage}</option>
             ))}
           </select>
@@ -108,7 +112,7 @@ export function LeadDetail({
       </header>
 
       <ol className="stage-strip" aria-label="Etapas do lead">
-        {stages.map((stage, index) => (
+        {visibleStages.map((stage, index) => (
           <li
             key={stage}
             className={

@@ -1,5 +1,6 @@
 export type NavKey =
   | "dashboard"
+  | "validation"
   | "prospecting"
   | "leads"
   | "previews"
@@ -8,6 +9,8 @@ export type NavKey =
 
 export type Owner = "Você" | "Sócia";
 export type Priority = "Urgente" | "Alta" | "Normal" | "Baixa";
+export type ValidationStatus = "pending" | "valid" | "discarded";
+export type LeadSource = "excel" | "manual" | "instagram";
 export type WeekDay = "Hoje" | "Seg" | "Ter" | "Qua" | "Qui" | "Sex";
 export type SiteStatus = "Sem site" | "Tem site" | "Não verificado";
 export type ProspectingOutcome =
@@ -62,11 +65,19 @@ export interface PreviewState {
 export interface Lead {
   id: number;
   remoteId?: string;
+  fullName?: string;
   handle: string;
   category: string;
+  validationStatus: ValidationStatus;
+  validatedAt?: string;
+  discardReason?: string;
+  batchId?: string;
+  batchName: string;
+  sourceType: LeadSource;
   owner: Owner;
   stage: Stage;
   nextAction: string;
+  nextActionAt?: string;
   priority: Priority;
   scheduleDay: WeekDay;
   dueTime: string;

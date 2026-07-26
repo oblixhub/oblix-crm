@@ -2,6 +2,7 @@ import {
   Bell,
   ChevronDown,
   CircleDollarSign,
+  ClipboardCheck,
   Eye,
   Home,
   LogOut,
@@ -23,15 +24,16 @@ const navItems: Array<{
   icon: typeof Home;
 }> = [
   { key: "dashboard", label: "Hoje", icon: Home },
+  { key: "validation", label: "Validação", icon: ClipboardCheck },
   { key: "prospecting", label: "Prospecção", icon: Search },
   { key: "leads", label: "Leads", icon: Users },
-  { key: "previews", label: "Previews", icon: Eye },
+  { key: "previews", label: "Sites", icon: Eye },
   { key: "finance", label: "Financeiro", icon: CircleDollarSign },
   { key: "messages", label: "Mensagens", icon: MessageSquareText },
 ];
 
 const mobileNavItems = navItems.filter((item) =>
-  ["dashboard", "prospecting", "leads", "previews", "messages"].includes(
+  ["dashboard", "validation", "prospecting", "leads", "previews"].includes(
     item.key,
   ),
 );

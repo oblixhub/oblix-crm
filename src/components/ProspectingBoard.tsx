@@ -122,7 +122,7 @@ export function ProspectingBoard({
     return leads
       .filter(
         (lead) =>
-          ["Validar", "Contatar", "Interessado", "Materiais"].includes(
+          ["Contatar", "Interessado", "Materiais"].includes(
             lead.stage,
           ) &&
           (ownerView === "Equipe" || lead.owner === ownerView) &&

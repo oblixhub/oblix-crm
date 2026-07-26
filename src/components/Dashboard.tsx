@@ -343,7 +343,6 @@ export function Dashboard({
               onChange={(value) => setStage(value as Stage | "Todos")}
               options={[
                 "Todos",
-                "Validar",
                 "Contatar",
                 "Interessado",
                 "Materiais",

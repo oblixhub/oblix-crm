@@ -167,6 +167,13 @@ export const initialLeads: Lead[] = Array.from({ length: 86 }, (_, index) => {
   const handle = cycle === 0 ? profile[0] : `${profile[0]}.${cycle + 1}`;
   const slug = handle.slice(1).replace(/[^a-z0-9]+/g, "-");
   const stage = stagePattern[index % stagePattern.length];
+  const validationStatus = index < 18 ? "pending" : "valid";
+  const operationalStage =
+    validationStatus === "pending"
+      ? "Validar"
+      : stage === "Validar"
+        ? "Contatar"
+        : stage;
   const previewStatus =
     stage === "Preview" ? "viewed" : stage === "Aprovação" ? "approved" : "none";
   const overdue = index % 11 === 0;
@@ -174,11 +181,16 @@ export const initialLeads: Lead[] = Array.from({ length: 86 }, (_, index) => {
   return {
     id: index + 1,
     handle,
+    validationStatus,
+    batchName: "Lote de demonstração",
+    sourceType: "excel",
     category: profile[1],
     owner: index % 3 === 0 ? "Sócia" : "Você",
-    stage,
+    stage: operationalStage,
     nextAction:
-      index % 10 === 9 ? "Definir próxima ação" : nextActionByStage[stage],
+      index % 10 === 9
+        ? "Definir próxima ação"
+        : nextActionByStage[operationalStage],
     priority: priorityPattern[index % priorityPattern.length],
     scheduleDay: dayPattern[index % dayPattern.length],
     dueTime: timeForIndex(index),
