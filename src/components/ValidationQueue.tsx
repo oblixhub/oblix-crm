@@ -2,15 +2,19 @@ import {
   ArrowRight,
   BadgeCheck,
   Ban,
+  CheckCheck,
   CheckCircle2,
   ExternalLink,
   FileSpreadsheet,
   Flag,
   Inbox,
   Instagram,
+  ListChecks,
   Plus,
   Search,
+  ShieldCheck,
   UserRoundCheck,
+  UsersRound,
 } from "lucide-react";
 import { useDeferredValue, useMemo, useState } from "react";
 import type {
@@ -21,7 +25,7 @@ import type {
   WeekDay,
 } from "../types";
 
-interface ValidationSettings {
+export interface ValidationSettings {
   priority: Priority;
   owner: Owner;
   nextAction: string;
@@ -29,9 +33,17 @@ interface ValidationSettings {
   time: string;
 }
 
+export interface BatchValidationSettings {
+  owner: Owner;
+}
+
 interface ValidationQueueProps {
   leads: Lead[];
   onValidate: (leadId: number, settings: ValidationSettings) => void;
+  onValidateBatch: (
+    batchName: string,
+    settings: BatchValidationSettings,
+  ) => void;
   onDiscard: (leadId: number, reason: string) => void;
   onNewLead: () => void;
   onImport: () => void;
@@ -46,6 +58,7 @@ const statusLabels: Record<ValidationStatus, string> = {
 export function ValidationQueue({
   leads,
   onValidate,
+  onValidateBatch,
   onDiscard,
   onNewLead,
   onImport,
@@ -68,6 +81,11 @@ export function ValidationQueue({
   const [day, setDay] = useState<WeekDay>("Hoje");
   const [time, setTime] = useState("10:00");
   const [discardReason, setDiscardReason] = useState("");
+  const [validationMode, setValidationMode] = useState<
+    "individual" | "batch"
+  >("individual");
+  const [batchOwner, setBatchOwner] = useState<Owner>("Você");
+  const [confirmBatch, setConfirmBatch] = useState(false);
 
   const batchLeads = leads.filter((lead) => lead.batchName === activeBatch);
   const counts = {
@@ -122,6 +140,12 @@ export function ValidationQueue({
     setDiscardReason("");
   };
 
+  const approveBatch = () => {
+    if (counts.pending === 0) return;
+    onValidateBatch(activeBatch, { owner: batchOwner });
+    setConfirmBatch(false);
+  };
+
   return (
     <div className="validation-page">
       <header className="validation-heading">
@@ -148,20 +172,20 @@ export function ValidationQueue({
       <section className="validation-flow-guide" aria-label="Fluxo de validação">
         <span className="active">
           <i>1</i>
-          <strong>Validar perfil</strong>
-          <small>Serve para prospecção?</small>
+          <strong>Selecionar lote</strong>
+          <small>Escolha a lista da semana</small>
         </span>
         <ArrowRight size={18} />
         <span>
           <i>2</i>
-          <strong>Configurar</strong>
-          <small>Prioridade e responsável</small>
+          <strong>Escolher validação</strong>
+          <small>Em massa ou perfil por perfil</small>
         </span>
         <ArrowRight size={18} />
         <span>
           <i>3</i>
           <strong>Enviar para Leads</strong>
-          <small>Pronto para contato</small>
+          <small>Fila pronta para contato</small>
         </span>
       </section>
 
@@ -173,6 +197,8 @@ export function ValidationQueue({
             onChange={(event) => {
               setActiveBatch(event.target.value);
               setSelectedId(null);
+              setValidationMode("individual");
+              setConfirmBatch(false);
             }}
           >
             {batches.map((batch) => (
@@ -211,6 +237,67 @@ export function ValidationQueue({
         </div>
       </section>
 
+      {status === "pending" && (
+        <section className="validation-mode-panel">
+          <header>
+            <div>
+              <span className="page-eyebrow">Tipo de entrada</span>
+              <h2>Como este lote deve ser validado?</h2>
+              <p>
+                O tipo de validação vale somente para o lote selecionado.
+              </p>
+            </div>
+            <span className="validation-mode-count">
+              <strong>{counts.pending}</strong>
+              perfis pendentes
+            </span>
+          </header>
+
+          <div className="validation-mode-options">
+            <button
+              className={validationMode === "individual" ? "active" : ""}
+              onClick={() => {
+                setValidationMode("individual");
+                setConfirmBatch(false);
+              }}
+            >
+              <span>
+                <ListChecks size={21} />
+              </span>
+              <i>
+                <strong>Revisar 1 por 1</strong>
+                <small>
+                  Para listas antigas: abra cada Instagram, descarte ou defina
+                  a prioridade.
+                </small>
+              </i>
+              <em>Mais controle</em>
+            </button>
+
+            <button
+              className={validationMode === "batch" ? "active" : ""}
+              disabled={counts.pending === 0}
+              onClick={() => {
+                setValidationMode("batch");
+                setSelectedId(null);
+              }}
+            >
+              <span>
+                <UsersRound size={21} />
+              </span>
+              <i>
+                <strong>Aprovar lote inteiro</strong>
+                <small>
+                  Para perfis já conferidos no Instagram: envie todos os
+                  pendentes para Leads.
+                </small>
+              </i>
+              <em>Mais rápido</em>
+            </button>
+          </div>
+        </section>
+      )}
+
       <div className="validation-status-tabs" role="tablist">
         {(["pending", "valid", "discarded"] as const).map((item) => (
           <button
@@ -221,6 +308,7 @@ export function ValidationQueue({
             onClick={() => {
               setStatus(item);
               setSelectedId(null);
+              setConfirmBatch(false);
             }}
           >
             {statusLabels[item]}
@@ -229,6 +317,115 @@ export function ValidationQueue({
         ))}
       </div>
 
+      {status === "pending" && validationMode === "batch" ? (
+        <section className="batch-validation-workspace">
+          <div className="batch-validation-hero">
+            <span>
+              <CheckCheck size={29} />
+            </span>
+            <div>
+              <span className="page-eyebrow">Aprovação em massa</span>
+              <h2>
+                {counts.pending > 0
+                  ? `Enviar ${counts.pending} perfis para Leads`
+                  : "Todos os perfis deste lote já foram processados"}
+              </h2>
+              <p>
+                Use este caminho quando os perfis já foram conferidos antes de
+                chegar ao CRM.
+              </p>
+            </div>
+          </div>
+
+          <div className="batch-validation-summary">
+            <span>
+              <small>Destino</small>
+              <strong>Leads · Contatar</strong>
+            </span>
+            <span>
+              <small>Prioridade</small>
+              <strong>Normal · não qualificada</strong>
+            </span>
+            <span>
+              <small>Próxima ação</small>
+              <strong>Enviar mensagem inicial</strong>
+            </span>
+          </div>
+
+          {counts.pending > 0 ? (
+            <div className="batch-validation-setup">
+              <label>
+                <span>
+                  <UserRoundCheck size={16} />
+                  Responsável inicial
+                </span>
+                <select
+                  value={batchOwner}
+                  onChange={(event) =>
+                    setBatchOwner(event.target.value as Owner)
+                  }
+                >
+                  <option>Você</option>
+                  <option>Sócia</option>
+                </select>
+                <small>
+                  Prazos e prioridades individuais podem ser ajustados depois
+                  na tela Leads.
+                </small>
+              </label>
+
+              <div className="batch-validation-note">
+                <ShieldCheck size={20} />
+                <p>
+                  <strong>Nenhum perfil será marcado como urgente.</strong>
+                  Todos entram com prioridade normal, sem qualificação
+                  individual.
+                </p>
+              </div>
+
+              {confirmBatch ? (
+                <div className="batch-validation-confirm" role="alert">
+                  <div>
+                    <strong>Confirmar {counts.pending} perfis?</strong>
+                    <p>
+                      O lote será enviado para a fila de contato de {batchOwner}.
+                    </p>
+                  </div>
+                  <button
+                    className="button button--secondary"
+                    onClick={() => setConfirmBatch(false)}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    className="button button--primary"
+                    onClick={approveBatch}
+                  >
+                    <CheckCheck size={18} />
+                    Confirmar e enviar
+                  </button>
+                </div>
+              ) : (
+                <button
+                  className="button button--primary batch-validation-submit"
+                  onClick={() => setConfirmBatch(true)}
+                >
+                  <CheckCheck size={19} />
+                  Aprovar os {counts.pending} pendentes
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="batch-validation-complete">
+              <BadgeCheck size={25} />
+              <div>
+                <strong>Lote sem pendências</strong>
+                <p>Os perfis aprovados já estão disponíveis na tela Leads.</p>
+              </div>
+            </div>
+          )}
+        </section>
+      ) : (
       <div className="validation-workspace">
         <aside className="validation-list">
           <label className="search-field">
@@ -430,6 +627,7 @@ export function ValidationQueue({
           </main>
         )}
       </div>
+      )}
     </div>
   );
 }

@@ -12,7 +12,10 @@ import { MessageManager } from "./components/MessageManager";
 import { Modal } from "./components/Modal";
 import { PreviewHub } from "./components/PreviewHub";
 import { ProspectingBoard } from "./components/ProspectingBoard";
-import { ValidationQueue } from "./components/ValidationQueue";
+import {
+  ValidationQueue,
+  type BatchValidationSettings,
+} from "./components/ValidationQueue";
 import { initialLeads, initialTemplates } from "./data";
 import { supabase, supabaseConfigured } from "./lib/supabase";
 import type {
@@ -231,6 +234,21 @@ const toDbPatch = (lead: Lead) => ({
   updated_at: new Date().toISOString(),
 });
 
+const MESSAGE_TEMPLATES_STORAGE_KEY = "oblix-message-templates-v2";
+
+const loadMessageTemplates = () => {
+  try {
+    const saved = window.localStorage.getItem(MESSAGE_TEMPLATES_STORAGE_KEY);
+    if (!saved) return initialTemplates;
+    const parsed = JSON.parse(saved) as MessageTemplate[];
+    return Array.isArray(parsed) && parsed.length > 0
+      ? parsed
+      : initialTemplates;
+  } catch {
+    return initialTemplates;
+  }
+};
+
 export default function App() {
   const devPreview =
     import.meta.env.DEV &&
@@ -240,7 +258,7 @@ export default function App() {
   const [session, setSession] = useState<Awaited<ReturnType<NonNullable<typeof supabase>["auth"]["getSession"]>>["data"]["session"]>(null);
   const [backendLoading, setBackendLoading] = useState(Boolean(supabaseConfigured));
   const [templates, setTemplates] = useState<MessageTemplate[]>(
-    () => initialTemplates,
+    loadMessageTemplates,
   );
   const [activeNav, setActiveNav] = useState<NavKey>("dashboard");
   const [selectedLeadId, setSelectedLeadId] = useState<number | null>(null);
@@ -312,6 +330,13 @@ export default function App() {
     document.documentElement.dataset.theme = theme;
     window.localStorage.setItem("oblix-theme", theme);
   }, [theme]);
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      MESSAGE_TEMPLATES_STORAGE_KEY,
+      JSON.stringify(templates),
+    );
+  }, [templates]);
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0 });
@@ -432,6 +457,91 @@ export default function App() {
       ),
     );
     showToast("Lead validado e enviado para a fila de prospecção.");
+  };
+
+  const validateBatch = (
+    batchName: string,
+    settings: BatchValidationSettings,
+  ) => {
+    const targets = leads.filter(
+      (lead) =>
+        lead.batchName === batchName && lead.validationStatus === "pending",
+    );
+    if (targets.length === 0) {
+      showToast("Este lote não possui leads pendentes.");
+      return;
+    }
+
+    const validatedAt = new Date().toISOString();
+    setLeads((current) =>
+      current.map((lead) => {
+        if (
+          lead.batchName !== batchName ||
+          lead.validationStatus !== "pending"
+        ) {
+          return lead;
+        }
+        return addActivity(
+          {
+            ...lead,
+            validationStatus: "valid",
+            validatedAt,
+            discardReason: undefined,
+            archived: false,
+            stage: "Contatar",
+            priority: "Normal",
+            owner: settings.owner,
+            nextAction: "Enviar mensagem inicial",
+            nextActionAt: undefined,
+            scheduleDay: "Hoje",
+            dueTime: "A definir",
+            overdue: false,
+          },
+          {
+            kind: "validation",
+            title: "Lead aprovado junto com o lote",
+            detail:
+              "Prioridade Normal (sem qualificação individual) · Enviar mensagem inicial.",
+            author: "Você",
+          },
+        );
+      }),
+    );
+
+    const remoteIds = targets.flatMap((lead) =>
+      lead.remoteId ? [lead.remoteId] : [],
+    );
+    if (supabase && session && remoteIds.length > 0) {
+      void supabase
+        .from("leads")
+        .update({
+          validation_status: "valid",
+          is_validated: true,
+          validated_at: validatedAt,
+          validated_by: session.user.id,
+          discard_reason: null,
+          stage: "Contatar",
+          priority: "Normal",
+          priority_marked: false,
+          owner: settings.owner,
+          next_action: "Enviar mensagem inicial",
+          next_action_at: null,
+          updated_at: validatedAt,
+        })
+        .eq("validation_status", "pending")
+        .in("id", remoteIds)
+        .then(({ error }) => {
+          if (error) {
+            showToast(
+              `Os leads foram atualizados na tela, mas não foi possível salvar: ${error.message}`,
+            );
+          }
+        });
+    }
+
+    showToast(
+      `${targets.length} leads aprovados com prioridade normal e enviados para Leads.`,
+    );
   };
 
   const discardLead = (leadId: number, reason: string) => {
@@ -920,6 +1030,7 @@ export default function App() {
       <ValidationQueue
         leads={leads}
         onValidate={validateLead}
+        onValidateBatch={validateBatch}
         onDiscard={discardLead}
         onNewLead={() => setModal({ type: "new-lead" })}
         onImport={() => setModal({ type: "import" })}

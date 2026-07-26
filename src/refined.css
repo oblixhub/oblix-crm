@@ -3779,6 +3779,144 @@ textarea {
   font-size: 17px;
 }
 
+.validation-mode-panel {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 14px;
+  padding: 18px;
+  border: 1px solid var(--app-border);
+  border-radius: 16px;
+  background: var(--app-surface);
+}
+
+.validation-mode-panel > header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.validation-mode-panel h2 {
+  margin: 3px 0 4px;
+  font-size: 21px;
+  letter-spacing: -0.025em;
+}
+
+.validation-mode-panel header p {
+  margin: 0;
+  color: var(--app-muted);
+  font-size: 13px;
+}
+
+.validation-mode-count {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  flex: 0 0 auto;
+  color: var(--app-muted);
+  font-size: 12px;
+}
+
+.validation-mode-count strong {
+  color: var(--app-text);
+  font-size: 22px;
+}
+
+.validation-mode-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.validation-mode-options > button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 86px;
+  border: 1px solid var(--app-border);
+  border-radius: 14px;
+  background: var(--app-surface-2);
+  color: var(--app-text);
+  cursor: pointer;
+  padding: 13px 14px;
+  text-align: left;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    transform 160ms ease;
+}
+
+.validation-mode-options > button:hover:not(:disabled) {
+  border-color: var(--app-border-strong);
+  transform: translateY(-1px);
+}
+
+.validation-mode-options > button.active {
+  border-color: var(--app-green);
+  background: color-mix(
+    in srgb,
+    var(--app-green-soft) 45%,
+    var(--app-surface)
+  );
+  box-shadow: inset 3px 0 var(--app-green);
+}
+
+.validation-mode-options > button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.validation-mode-options > button > span {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  background: var(--app-surface);
+  color: var(--app-muted);
+}
+
+.validation-mode-options > button.active > span {
+  border-color: color-mix(in srgb, var(--app-green) 45%, var(--app-border));
+  color: var(--app-green);
+}
+
+.validation-mode-options i {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  font-style: normal;
+}
+
+.validation-mode-options i strong {
+  font-size: 15px;
+}
+
+.validation-mode-options i small {
+  color: var(--app-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.validation-mode-options em {
+  align-self: start;
+  border-radius: 999px;
+  background: var(--app-surface);
+  color: var(--app-muted);
+  padding: 5px 8px;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.validation-mode-options > button.active em {
+  background: var(--app-green-soft);
+  color: var(--app-green);
+}
+
 .validation-status-tabs {
   display: flex;
   gap: 7px;
@@ -4114,6 +4252,205 @@ textarea {
   margin: 0;
 }
 
+.batch-validation-workspace {
+  display: grid;
+  gap: 22px;
+  min-height: 440px;
+  align-content: start;
+  padding: clamp(22px, 4vw, 42px);
+  border: 1px solid var(--app-border);
+  border-radius: 18px;
+  background:
+    radial-gradient(
+      circle at 90% 0%,
+      color-mix(in srgb, var(--app-green) 8%, transparent),
+      transparent 34%
+    ),
+    var(--app-surface);
+  box-shadow: var(--app-shadow);
+}
+
+.batch-validation-hero {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.batch-validation-hero > span {
+  display: grid;
+  width: 58px;
+  height: 58px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--app-green) 40%, var(--app-border));
+  border-radius: 17px;
+  background: var(--app-green-soft);
+  color: var(--app-green);
+}
+
+.batch-validation-hero h2 {
+  margin: 3px 0 4px;
+  font-size: clamp(25px, 3vw, 35px);
+  letter-spacing: -0.035em;
+}
+
+.batch-validation-hero p {
+  margin: 0;
+  color: var(--app-muted);
+  font-size: 14px;
+}
+
+.batch-validation-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.batch-validation-summary > span {
+  display: grid;
+  gap: 6px;
+  min-height: 82px;
+  align-content: center;
+  padding: 13px 15px;
+  border: 1px solid var(--app-border);
+  border-radius: 13px;
+  background: var(--app-surface-2);
+}
+
+.batch-validation-summary small {
+  color: var(--app-muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.batch-validation-summary strong {
+  font-size: 14px;
+}
+
+.batch-validation-setup {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.75fr) minmax(320px, 1.25fr);
+  align-items: end;
+  gap: 14px;
+  padding-top: 4px;
+}
+
+.batch-validation-setup > label {
+  display: grid;
+  gap: 7px;
+}
+
+.batch-validation-setup > label > span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--app-muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.batch-validation-setup select {
+  min-height: 48px;
+  border: 1px solid var(--app-border);
+  border-radius: 11px;
+  background: var(--app-surface-2);
+  color: var(--app-text);
+  padding: 0 12px;
+  font-size: 15px;
+  font-weight: 750;
+}
+
+.batch-validation-setup label small {
+  color: var(--app-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.batch-validation-note {
+  display: flex;
+  min-height: 72px;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 13px 14px;
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  background: var(--app-surface-2);
+  color: var(--app-muted);
+}
+
+.batch-validation-note svg {
+  flex: 0 0 auto;
+  color: var(--app-green);
+}
+
+.batch-validation-note p {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.batch-validation-note strong {
+  color: var(--app-text);
+}
+
+.batch-validation-submit,
+.batch-validation-confirm {
+  grid-column: 1 / -1;
+  justify-self: end;
+}
+
+.batch-validation-submit {
+  min-width: 250px;
+}
+
+.batch-validation-confirm {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  width: 100%;
+  align-items: center;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid color-mix(in srgb, var(--app-green) 40%, var(--app-border));
+  border-radius: 13px;
+  background: color-mix(
+    in srgb,
+    var(--app-green-soft) 40%,
+    var(--app-surface)
+  );
+}
+
+.batch-validation-confirm p {
+  margin: 3px 0 0;
+  color: var(--app-muted);
+  font-size: 12px;
+}
+
+.batch-validation-complete {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid color-mix(in srgb, var(--app-green) 38%, var(--app-border));
+  border-radius: 14px;
+  background: var(--app-green-soft);
+  color: var(--app-green);
+}
+
+.batch-validation-complete div {
+  display: grid;
+  gap: 3px;
+}
+
+.batch-validation-complete p {
+  margin: 0;
+  color: var(--app-muted);
+  font-size: 13px;
+}
+
 @media (max-width: 1120px) {
   .batch-control {
     grid-template-columns: 200px 1fr;
@@ -4215,6 +4552,39 @@ textarea {
     justify-items: center;
   }
 
+  .validation-mode-panel {
+    padding: 13px;
+  }
+
+  .validation-mode-panel > header {
+    align-items: flex-start;
+  }
+
+  .validation-mode-panel h2 {
+    font-size: 18px;
+  }
+
+  .validation-mode-count {
+    display: grid;
+    justify-items: end;
+    line-height: 1.1;
+    text-align: right;
+  }
+
+  .validation-mode-options {
+    grid-template-columns: 1fr;
+  }
+
+  .validation-mode-options > button {
+    grid-template-columns: auto minmax(0, 1fr);
+    min-height: 88px;
+    padding: 11px;
+  }
+
+  .validation-mode-options em {
+    display: none;
+  }
+
   .validation-status-tabs {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -4314,6 +4684,58 @@ textarea {
   }
 
   .validation-actions .button {
+    min-width: 0;
+    padding-inline: 9px;
+  }
+
+  .batch-validation-workspace {
+    min-height: 0;
+    gap: 17px;
+    padding: 17px 14px;
+    border-radius: 15px;
+  }
+
+  .batch-validation-hero {
+    align-items: flex-start;
+  }
+
+  .batch-validation-hero > span {
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+  }
+
+  .batch-validation-hero h2 {
+    font-size: 24px;
+  }
+
+  .batch-validation-summary {
+    grid-template-columns: 1fr;
+    gap: 7px;
+  }
+
+  .batch-validation-summary > span {
+    min-height: 66px;
+  }
+
+  .batch-validation-setup {
+    grid-template-columns: 1fr;
+  }
+
+  .batch-validation-submit {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .batch-validation-confirm {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .batch-validation-confirm > div {
+    grid-column: 1 / -1;
+  }
+
+  .batch-validation-confirm .button {
     min-width: 0;
     padding-inline: 9px;
   }

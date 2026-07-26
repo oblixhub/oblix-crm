@@ -7,7 +7,7 @@ import {
   Star,
   Trash2,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { MessageTemplate } from "../types";
 
 interface MessageManagerProps {
@@ -38,6 +38,9 @@ export function MessageManager({
   const [addingCategory, setAddingCategory] = useState(false);
   const [newCategory, setNewCategory] = useState("");
   const [customCategories, setCustomCategories] = useState<string[]>([]);
+  const [draft, setDraft] = useState<MessageTemplate | null>(
+    templates[0] ? { ...templates[0] } : null,
+  );
 
   const categories = useMemo(
     () => [
@@ -66,6 +69,16 @@ export function MessageManager({
     visibleTemplates[0] ??
     templates[0];
 
+  useEffect(() => {
+    if (!selected) {
+      setDraft(null);
+      return;
+    }
+    setDraft((current) =>
+      current?.id === selected.id ? current : { ...selected },
+    );
+  }, [selected]);
+
   const copyText = async (text: string, title: string) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -83,10 +96,11 @@ export function MessageManager({
   };
 
   const addVariable = (variable: string) => {
-    if (!selected) return;
-    const separator = selected.message.endsWith(" ") ? "" : " ";
-    onUpdate(selected.id, {
-      message: `${selected.message}${separator}${variable}`,
+    if (!draft) return;
+    const separator = draft.message.endsWith(" ") ? "" : " ";
+    setDraft({
+      ...draft,
+      message: `${draft.message}${separator}${variable}`,
     });
     setSaved(false);
   };
@@ -189,6 +203,7 @@ export function MessageManager({
                 className={selected?.id === template.id ? "active" : ""}
                 onClick={() => {
                   setSelectedId(template.id);
+                  setDraft({ ...template });
                   setSaved(false);
                 }}
               >
@@ -270,9 +285,13 @@ export function MessageManager({
               <label className="editor-field">
                 <span>Título</span>
                 <input
-                  value={selected.title}
+                  value={draft?.title ?? selected.title}
                   onChange={(event) => {
-                    onUpdate(selected.id, { title: event.target.value });
+                    setDraft((current) =>
+                      current
+                        ? { ...current, title: event.target.value }
+                        : current,
+                    );
                     setSaved(false);
                   }}
                 />
@@ -281,9 +300,13 @@ export function MessageManager({
               <label className="editor-field">
                 <span>Categoria</span>
                 <select
-                  value={selected.category}
+                  value={draft?.category ?? selected.category}
                   onChange={(event) => {
-                    onUpdate(selected.id, { category: event.target.value });
+                    setDraft((current) =>
+                      current
+                        ? { ...current, category: event.target.value }
+                        : current,
+                    );
                     setSaved(false);
                   }}
                 >
@@ -296,13 +319,17 @@ export function MessageManager({
               <label className="editor-field editor-message-field">
                 <span>
                   Mensagem
-                  <small>{selected.message.length}/2000</small>
+                  <small>{(draft?.message ?? selected.message).length}/2000</small>
                 </span>
                 <textarea
                   maxLength={2000}
-                  value={selected.message}
+                  value={draft?.message ?? selected.message}
                   onChange={(event) => {
-                    onUpdate(selected.id, { message: event.target.value });
+                    setDraft((current) =>
+                      current
+                        ? { ...current, message: event.target.value }
+                        : current,
+                    );
                     setSaved(false);
                   }}
                 />
@@ -321,10 +348,15 @@ export function MessageManager({
               <label className="shared-checkbox">
                 <input
                   type="checkbox"
-                  checked={selected.shared}
-                  onChange={(event) =>
-                    onUpdate(selected.id, { shared: event.target.checked })
-                  }
+                  checked={draft?.shared ?? selected.shared}
+                  onChange={(event) => {
+                    setDraft((current) =>
+                      current
+                        ? { ...current, shared: event.target.checked }
+                        : current,
+                    );
+                    setSaved(false);
+                  }}
                 />
                 <span>
                   <strong>Disponível para toda a equipe</strong>
@@ -336,14 +368,19 @@ export function MessageManager({
                 <header>
                   <strong>Pré-visualização</strong>
                   <button
-                    onClick={() => copyText(selected.message, selected.title)}
+                    onClick={() =>
+                      copyText(
+                        draft?.message ?? selected.message,
+                        draft?.title ?? selected.title,
+                      )
+                    }
                   >
                     <Copy size={15} />
                     Copiar teste
                   </button>
                 </header>
                 <p>
-                  {selected.message
+                  {(draft?.message ?? selected.message)
                     .replaceAll("[nome]", "João")
                     .replaceAll("[seu nome]", "Você")
                     .replaceAll("[perfil]", "negócios locais")
@@ -354,16 +391,27 @@ export function MessageManager({
               <footer>
                 <button
                   className="button button--secondary"
-                  onClick={() => setSaved(false)}
+                  onClick={() => {
+                    setDraft({ ...selected });
+                    setSaved(false);
+                  }}
                 >
                   Cancelar
                 </button>
                 <button
                   className="button button--primary"
                   onClick={() => {
-                    onUpdate(selected.id, { updatedLabel: "Editado agora" });
+                    if (!draft) return;
+                    onUpdate(selected.id, {
+                      title: draft.title,
+                      category: draft.category,
+                      message: draft.message,
+                      shared: draft.shared,
+                      updatedLabel: "Editado agora",
+                    });
+                    setDraft({ ...draft, updatedLabel: "Editado agora" });
                     setSaved(true);
-                    onSaved(selected.title);
+                    onSaved(draft.title);
                   }}
                 >
                   Salvar alterações
