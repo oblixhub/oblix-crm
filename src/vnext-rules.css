@@ -14,9 +14,10 @@
 }
 
 :root[data-theme="dark"] .refined-sidebar .nav-item.active {
-  border: 1px solid color-mix(in srgb, var(--app-green) 72%, transparent);
+  border: 1px solid var(--app-border-strong);
   background: var(--app-sidebar-active);
   color: #ffffff;
+  box-shadow: inset 3px 0 var(--app-green);
 }
 
 :root[data-theme="dark"] .refined-topbar {
@@ -34,9 +35,53 @@
   box-shadow: var(--app-shadow);
 }
 
-:root[data-theme="dark"] .auth-mark {
-  background: var(--app-green);
-  color: #00170d;
+.brand {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand img {
+  display: block;
+  flex: 0 0 auto;
+  height: auto;
+}
+
+.brand-symbol {
+  width: 38px;
+}
+
+.brand-wordmark {
+  width: 104px;
+}
+
+.refined-sidebar .nav-item.active {
+  border: 1px solid var(--app-border-strong);
+  box-shadow: inset 3px 0 var(--app-green);
+}
+
+:root[data-theme="dark"] .brand img,
+.refined-sidebar .brand img {
+  filter: invert(1);
+}
+
+.auth-brand {
+  margin-bottom: 4px;
+}
+
+.auth-brand .brand {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 13px;
+}
+
+.auth-brand .brand-symbol {
+  width: 72px;
+}
+
+.auth-brand .brand-wordmark {
+  width: 152px;
 }
 
 .auth-card .field input {
@@ -123,10 +168,10 @@
 .next-action-focus {
   min-height: 118px;
   margin-bottom: 16px;
-  border-color: color-mix(in srgb, var(--app-green) 72%, var(--app-border));
+  border-color: var(--app-border-strong);
   border-radius: 16px;
   background: var(--app-surface);
-  box-shadow: none;
+  box-shadow: inset 3px 0 var(--app-green);
 }
 
 .next-action-copy > span {
@@ -147,6 +192,16 @@
 
 .team-member-load {
   min-height: 58px;
+}
+
+.team-workload-title {
+  color: var(--app-muted);
+}
+
+.team-member-load > i {
+  border: 1px solid var(--app-border);
+  background: var(--app-surface-3);
+  color: var(--app-text);
 }
 
 .operations-summary {
@@ -236,6 +291,12 @@
 
 .week-tabs {
   margin-bottom: 10px;
+}
+
+.week-tabs button.active {
+  border-color: var(--app-text);
+  background: var(--app-text);
+  color: var(--app-bg);
 }
 
 .lead-card-list,
@@ -468,19 +529,20 @@
   }
 
   .mobile-brand {
-    gap: 9px;
+    display: flex;
+    align-items: center;
   }
 
-  .mobile-brand > span {
-    width: 34px;
-    height: 34px;
-    border-radius: 10px;
-    font-size: 17px;
+  .mobile-brand .brand {
+    gap: 8px;
   }
 
-  .mobile-brand strong {
-    font-size: 15px;
-    letter-spacing: -0.02em;
+  .mobile-brand .brand-symbol {
+    width: 31px;
+  }
+
+  .mobile-brand .brand-wordmark {
+    width: 84px;
   }
 
   .topbar-theme-toggle,
@@ -523,8 +585,12 @@
   }
 
   .mobile-bottom-nav button.active {
-    border-color: color-mix(in srgb, var(--app-green) 24%, transparent);
-    background: var(--app-green-soft);
+    border-color: var(--app-border-strong);
+    background: var(--app-surface-2);
+    color: var(--app-text);
+  }
+
+  .mobile-bottom-nav button.active svg {
     color: var(--app-green);
   }
 
@@ -1000,8 +1066,8 @@
 }
 
 @media (max-width: 410px) {
-  .mobile-brand strong {
-    display: none;
+  .mobile-brand .brand-wordmark {
+    width: 76px;
   }
 
   .operations-header h1 {

@@ -1,18 +1,35 @@
-/* OBLIX CRM vNext — command center desktop + app-first mobile */
+/* OBLIX CRM vNext — monochrome brand system + restrained action green */
+:root {
+  --app-bg: #f4f4f4;
+  --app-surface: #ffffff;
+  --app-surface-2: #eeeeee;
+  --app-surface-3: #e8e8e8;
+  --app-text: #080808;
+  --app-muted: #666666;
+  --app-border: #dddddd;
+  --app-border-strong: #bdbdbd;
+  --app-green: #0baa62;
+  --app-green-strong: #078249;
+  --app-green-soft: #edf2ef;
+  --app-sidebar: #050505;
+  --app-sidebar-active: #151515;
+  --app-shadow: 0 18px 48px rgba(0, 0, 0, 0.08);
+}
+
 :root[data-theme="dark"] {
   --app-bg: #000000;
-  --app-surface: #080a09;
-  --app-surface-2: #101310;
-  --app-surface-3: #0b2a1d;
-  --app-text: #f5f7f5;
-  --app-muted: #a7afa9;
-  --app-border: #232823;
-  --app-border-strong: #343b35;
-  --app-green: #20c77a;
-  --app-green-strong: #42dc94;
-  --app-green-soft: #0b2a1d;
+  --app-surface: #080808;
+  --app-surface-2: #111111;
+  --app-surface-3: #161616;
+  --app-text: #f7f7f7;
+  --app-muted: #a6a6a6;
+  --app-border: #242424;
+  --app-border-strong: #3b3b3b;
+  --app-green: #18c978;
+  --app-green-strong: #35d98d;
+  --app-green-soft: #111713;
   --app-sidebar: #000000;
-  --app-sidebar-active: #092417;
+  --app-sidebar-active: #121212;
   --app-shadow: 0 18px 48px rgba(0, 0, 0, 0.44);
   --app-red: #ff535c;
   --app-red-soft: #2b1114;

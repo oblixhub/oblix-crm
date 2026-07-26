@@ -131,9 +131,8 @@ export function AppShell({
           >
             <Menu size={22} />
           </button>
-          <div className="mobile-brand" aria-label="OBLIX CRM">
-            <span>O</span>
-            <strong>OBLIX CRM</strong>
+          <div className="mobile-brand">
+            <Brand />
           </div>
           <div className="topbar-spacer" />
           <button

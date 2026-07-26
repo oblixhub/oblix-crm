@@ -1,6 +1,7 @@
 import { Eye, EyeOff, FileSpreadsheet, Plus, UploadCloud } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { AppShell } from "./components/AppShell";
+import { Brand } from "./components/Brand";
 import { ClientPreview } from "./components/ClientPreview";
 import { Dashboard } from "./components/Dashboard";
 import { FinanceView } from "./components/FinanceView";
@@ -1281,8 +1282,9 @@ function LoginScreen() {
   return (
     <main className="auth-screen">
       <form className="auth-card" onSubmit={submit}>
-        <div className="auth-mark">O</div>
-        <span className="eyebrow">STUDIO OBLIX</span>
+        <div className="auth-brand">
+          <Brand />
+        </div>
         <h1>Entrar no CRM</h1>
         <p>Acompanhe a fila de validação e a prospecção da dupla.</p>
         <label className="field"><span>E-mail</span><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="voce@oblix.com" required /></label>
