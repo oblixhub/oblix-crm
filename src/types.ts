@@ -8,6 +8,11 @@ export type NavKey =
   | "messages";
 
 export type Owner = "Você" | "Sócia";
+export const owners: readonly Owner[] = ["Você", "Sócia"];
+export const ownerLabels: Record<Owner, string> = {
+  "Você": "Hugo",
+  "Sócia": "Raiza",
+};
 export type Priority = "Urgente" | "Alta" | "Normal" | "Baixa";
 export type ValidationStatus = "pending" | "valid" | "discarded";
 export type LeadSource = "excel" | "manual" | "instagram";
@@ -18,7 +23,8 @@ export type ProspectingOutcome =
   | "Sem resposta"
   | "Interessado"
   | "Não interessado"
-  | "Retornar depois";
+  | "Retornar depois"
+  | "Já possui site";
 
 export const stages = [
   "Validar",

@@ -7,6 +7,7 @@ import {
   Clock3,
   ExternalLink,
   Flag,
+  Globe2,
   Instagram,
   MessageCircleMore,
   Play,
@@ -15,6 +16,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { ownerLabels, owners } from "../types";
 import type {
   Lead,
   Owner,
@@ -66,6 +68,13 @@ const outcomes: Array<{
     icon: CalendarClock,
     tone: "amber",
   },
+  {
+    value: "Já possui site",
+    label: "Já possui site",
+    description: "Não prospectar agora",
+    icon: Globe2,
+    tone: "gray",
+  },
 ];
 
 const nextActions = [
@@ -89,6 +98,7 @@ interface ProspectingBoardProps {
   onSelectLead: (id: number) => void;
   onOpenMessages: (id: number) => void;
   onPriorityChange: (id: number, priority: Priority) => void;
+  onOwnerChange: (id: number, owner: Owner) => void;
   onSaveOutcome: (
     id: number,
     outcome: ProspectingOutcome,
@@ -104,6 +114,7 @@ export function ProspectingBoard({
   onSelectLead,
   onOpenMessages,
   onPriorityChange,
+  onOwnerChange,
   onSaveOutcome,
 }: ProspectingBoardProps) {
   const [ownerView, setOwnerView] = useState<Owner | "Equipe">("Você");
@@ -185,6 +196,10 @@ export function ProspectingBoard({
     const nextLead = queue[selectedIndex + 1] ?? queue[0];
     setSelectedId(nextLead?.id ?? null);
     setNote("");
+    setSelectedOutcome("Mensagem enviada");
+    setNextAction("Enviar mensagem de follow-up");
+    setScheduleDay("Ter");
+    setTime("10:00");
   };
 
   return (
@@ -204,13 +219,13 @@ export function ProspectingBoard({
           <small>70%</small>
         </div>
         <div className="owner-switch" aria-label="Visualização da fila">
-          {(["Você", "Sócia", "Equipe"] as const).map((item) => (
+          {[...owners, "Equipe" as const].map((item) => (
             <button
               key={item}
               className={ownerView === item ? "active" : ""}
               onClick={() => setOwnerView(item)}
             >
-              {item === "Você" ? "Minha fila" : item}
+              {item === "Equipe" ? "Equipe" : ownerLabels[item]}
             </button>
           ))}
         </div>
@@ -323,7 +338,21 @@ export function ProspectingBoard({
             <div className="context-meta">
               <label>
                 <span>Responsável</span>
-                <strong>{selectedLead.owner}</strong>
+                <select
+                  value={selectedLead.owner}
+                  onChange={(event) =>
+                    onOwnerChange(
+                      selectedLead.id,
+                      event.target.value as Owner,
+                    )
+                  }
+                >
+                  {owners.map((owner) => (
+                    <option key={owner} value={owner}>
+                      {ownerLabels[owner]}
+                    </option>
+                  ))}
+                </select>
               </label>
               <label>
                 <span>Prioridade</span>
@@ -435,6 +464,8 @@ export function ProspectingBoard({
                       setNextAction("Retomar contato");
                     if (outcome.value === "Não interessado")
                       setNextAction("Encerrar lead");
+                    if (outcome.value === "Já possui site")
+                      setNextAction("Nenhuma ação necessária");
                   }}
                 >
                   <i>
@@ -453,6 +484,7 @@ export function ProspectingBoard({
             <span>Próxima ação</span>
             <select
               value={nextAction}
+              disabled={selectedOutcome === "Já possui site"}
               onChange={(event) => setNextAction(event.target.value)}
             >
               {nextActions.map((action) => (
@@ -466,6 +498,7 @@ export function ProspectingBoard({
               <span>Dia</span>
               <select
                 value={scheduleDay}
+                disabled={selectedOutcome === "Já possui site"}
                 onChange={(event) =>
                   setScheduleDay(event.target.value as WeekDay)
                 }
@@ -483,6 +516,7 @@ export function ProspectingBoard({
               <input
                 type="time"
                 value={time}
+                disabled={selectedOutcome === "Já possui site"}
                 onChange={(event) => setTime(event.target.value)}
               />
             </label>

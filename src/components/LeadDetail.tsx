@@ -16,7 +16,15 @@ import {
   UserRoundCheck,
 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { stages, type Activity, type Lead, type Stage } from "../types";
+import {
+  ownerLabels,
+  owners,
+  stages,
+  type Activity,
+  type Lead,
+  type Owner,
+  type Stage,
+} from "../types";
 import { ContactActions } from "./ContactActions";
 
 const activityIcons = {
@@ -33,6 +41,7 @@ interface LeadDetailProps {
   lead: Lead;
   onBack: () => void;
   onStageChange: (stage: Stage) => void;
+  onOwnerChange: (owner: Owner) => void;
   onAddNote: (note: string) => void;
   onUpload: (file: File) => void;
   onOpenClientPreview: () => void;
@@ -44,6 +53,7 @@ export function LeadDetail({
   lead,
   onBack,
   onStageChange,
+  onOwnerChange,
   onAddNote,
   onUpload,
   onOpenClientPreview,
@@ -93,6 +103,19 @@ export function LeadDetail({
           >
             {visibleStages.map((stage) => (
               <option key={stage}>{stage}</option>
+            ))}
+          </select>
+        </label>
+        <label className="field compact-field">
+          <span>Responsável</span>
+          <select
+            value={lead.owner}
+            onChange={(event) => onOwnerChange(event.target.value as Owner)}
+          >
+            {owners.map((owner) => (
+              <option key={owner} value={owner}>
+                {ownerLabels[owner]}
+              </option>
             ))}
           </select>
         </label>

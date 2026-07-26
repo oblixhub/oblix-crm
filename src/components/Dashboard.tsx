@@ -15,7 +15,7 @@ import {
   UsersRound,
 } from "lucide-react";
 import { useDeferredValue, useMemo, useState } from "react";
-import type { Lead, Owner, Priority, Stage, WeekDay } from "../types";
+import { ownerLabels, type Lead, type Owner, type Priority, type Stage, type WeekDay } from "../types";
 import { LeadCard, ownerName } from "./LeadCard";
 
 type DayFilter = WeekDay | "Atrasados" | "Todos";
@@ -350,6 +350,9 @@ export function Dashboard({
               value={owner}
               onChange={(value) => setOwner(value as Owner | "Todos")}
               options={["Todos", "Você", "Sócia"]}
+              formatOption={(option) =>
+                option === "Todos" ? option : ownerLabels[option as Owner]
+              }
             />
             <FilterSelect
               label="Etapa"
@@ -494,11 +497,13 @@ function FilterSelect({
   label,
   value,
   options,
+  formatOption,
   onChange,
 }: {
   label: string;
   value: string;
   options: readonly string[];
+  formatOption?: (option: string) => string;
   onChange: (value: string) => void;
 }) {
   return (
@@ -507,7 +512,7 @@ function FilterSelect({
       <span>
         <select value={value} onChange={(event) => onChange(event.target.value)}>
           {options.map((option) => (
-            <option key={option}>{option}</option>
+            <option key={option}>{formatOption?.(option) ?? option}</option>
           ))}
         </select>
         <ChevronDown size={16} />

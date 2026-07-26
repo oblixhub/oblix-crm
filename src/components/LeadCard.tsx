@@ -5,7 +5,7 @@ import {
   ExternalLink,
   Flag,
 } from "lucide-react";
-import type { Lead, Priority } from "../types";
+import { ownerLabels, type Lead, type Priority } from "../types";
 import { ContactActions } from "./ContactActions";
 import { StageBadge } from "./StageBadge";
 
@@ -21,7 +21,7 @@ interface LeadCardProps {
 const priorities: Priority[] = ["Urgente", "Alta", "Normal", "Baixa"];
 
 export function ownerName(owner: Lead["owner"]) {
-  return owner === "Você" ? "Hugo" : "Raiza";
+  return ownerLabels[owner];
 }
 
 function leadInitials(handle: string) {

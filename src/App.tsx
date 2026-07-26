@@ -29,6 +29,7 @@ import type {
   Stage,
   WeekDay,
 } from "./types";
+import { ownerLabels, owners } from "./types";
 
 type ModalState =
   | { type: "new-lead" }
@@ -246,6 +247,7 @@ const toDbPatch = (lead: Lead) => ({
   priority: lead.priority,
   stage: lead.stage,
   owner: lead.owner,
+  site_status: lead.siteStatus,
   validation_status: lead.validationStatus,
   is_validated: lead.validationStatus === "valid",
   validated_at: lead.validatedAt ?? null,
@@ -441,6 +443,22 @@ export default function App() {
   const changePriority = (leadId: number, priority: Priority) => {
     updateLead(leadId, (lead) => ({ ...lead, priority }));
     showToast(`Prioridade alterada para ${priority}.`);
+  };
+
+  const changeOwner = (leadId: number, owner: Owner) => {
+    updateLead(leadId, (lead) => {
+      if (lead.owner === owner) return lead;
+      return addActivity(
+        { ...lead, owner },
+        {
+          kind: "note",
+          title: `Responsável alterado para ${ownerLabels[owner]}`,
+          detail: "Responsável da prospecção atualizado.",
+          author: "Você",
+        },
+      );
+    });
+    showToast(`Responsável atualizado para ${ownerLabels[owner]}.`);
   };
 
   const validateLead = (
@@ -829,11 +847,8 @@ export default function App() {
   };
 
   const updateMany = (ids: number[], patch: Partial<Lead>) => {
-    const selected = new Set(ids);
-    setLeads((current) =>
-      current.map((lead) =>
-        selected.has(lead.id) ? { ...lead, ...patch } : lead,
-      ),
+    ids.forEach((leadId) =>
+      updateLead(leadId, (lead) => ({ ...lead, ...patch })),
     );
     showToast(`${ids.length} leads atualizados.`);
   };
@@ -865,29 +880,45 @@ export default function App() {
       Interessado: "Interessado",
       "Não interessado": "Contatar",
       "Retornar depois": "Contatar",
+      "Já possui site": "Contatar",
     };
+    const alreadyHasSite = outcome === "Já possui site";
     updateLead(leadId, (lead) =>
       addActivity(
         {
           ...lead,
           stage: stageByOutcome[outcome] ?? lead.stage,
-          nextAction,
-          scheduleDay,
-          dueTime,
+          nextAction: alreadyHasSite
+            ? "Nenhuma ação necessária"
+            : nextAction,
+          scheduleDay: alreadyHasSite ? lead.scheduleDay : scheduleDay,
+          dueTime: alreadyHasSite ? lead.dueTime : dueTime,
           overdue: false,
-          archived: outcome === "Não interessado",
+          archived: outcome === "Não interessado" || alreadyHasSite,
+          siteStatus: alreadyHasSite ? "Tem site" : lead.siteStatus,
         },
         {
-          kind: outcome === "Interessado" ? "interest" : "message",
+          kind:
+            outcome === "Interessado"
+              ? "interest"
+              : alreadyHasSite
+                ? "note"
+                : "message",
           title: outcome,
           detail:
             note.trim() ||
-            `Resultado registrado. Próximo passo: ${nextAction}.`,
+            (alreadyHasSite
+              ? "Possui site ativo. Lead retirado da fila de prospecção."
+              : `Resultado registrado. Próximo passo: ${nextAction}.`),
           author: "Você",
         },
       ),
     );
-    showToast(`${outcome} registrado. Próximo lead aberto.`);
+    showToast(
+      alreadyHasSite
+        ? "Lead marcado como já possui site e retirado da fila."
+        : `${outcome} registrado. Próximo lead aberto.`,
+    );
   };
 
   const uploadPreview = (file: File) => {
@@ -1071,6 +1102,7 @@ export default function App() {
         lead={selectedLead}
         onBack={() => setSelectedLeadId(null)}
         onStageChange={changeStage}
+        onOwnerChange={(owner) => changeOwner(selectedLead.id, owner)}
         onAddNote={addNote}
         onUpload={uploadPreview}
         onOpenClientPreview={() => openClientPreview()}
@@ -1116,6 +1148,7 @@ export default function App() {
         onSelectLead={selectLead}
         onOpenMessages={openMessages}
         onPriorityChange={changePriority}
+        onOwnerChange={changeOwner}
         onSaveOutcome={saveProspectingOutcome}
       />
     );
@@ -1338,8 +1371,11 @@ function NewLeadForm({
             value={owner}
             onChange={(event) => setOwner(event.target.value as Owner)}
           >
-            <option>Você</option>
-            <option>Sócia</option>
+            {owners.map((teamOwner) => (
+              <option key={teamOwner} value={teamOwner}>
+                {ownerLabels[teamOwner]}
+              </option>
+            ))}
           </select>
         </label>
         <label className="field">

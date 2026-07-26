@@ -17,6 +17,7 @@ import {
   UsersRound,
 } from "lucide-react";
 import { useDeferredValue, useMemo, useState } from "react";
+import { ownerLabels, owners } from "../types";
 import type {
   Lead,
   Owner,
@@ -365,8 +366,11 @@ export function ValidationQueue({
                     setBatchOwner(event.target.value as Owner)
                   }
                 >
-                  <option>Você</option>
-                  <option>Sócia</option>
+                  {owners.map((teamOwner) => (
+                    <option key={teamOwner} value={teamOwner}>
+                      {ownerLabels[teamOwner]}
+                    </option>
+                  ))}
                 </select>
                 <small>
                   Prazos e prioridades individuais podem ser ajustados depois
@@ -536,8 +540,11 @@ export function ValidationQueue({
                         setOwner(event.target.value as Owner)
                       }
                     >
-                      <option>Você</option>
-                      <option>Sócia</option>
+                      {owners.map((teamOwner) => (
+                        <option key={teamOwner} value={teamOwner}>
+                          {ownerLabels[teamOwner]}
+                        </option>
+                      ))}
                     </select>
                   </label>
                   <label className="validation-next-action">
