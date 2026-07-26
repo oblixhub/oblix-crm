@@ -61,7 +61,7 @@ export function AppShell({
   };
 
   return (
-    <div className="app-shell refined-shell">
+    <div className="app-shell refined-shell" data-active-view={active}>
       <aside className={`sidebar refined-sidebar ${mobileOpen ? "is-open" : ""}`}>
         <div className="sidebar-header">
           <Brand />
@@ -82,6 +82,7 @@ export function AppShell({
                 key={item.key}
                 className={`nav-item ${active === item.key ? "active" : ""}`}
                 onClick={() => navigate(item.key)}
+                aria-current={active === item.key ? "page" : undefined}
               >
                 <Icon size={19} strokeWidth={1.8} />
                 <span>{item.label}</span>
@@ -130,7 +131,7 @@ export function AppShell({
           >
             <Menu size={22} />
           </button>
-          <div className="mobile-brand">
+          <div className="mobile-brand" aria-label="OBLIX CRM">
             <span>O</span>
             <strong>OBLIX CRM</strong>
           </div>
@@ -159,9 +160,12 @@ export function AppShell({
                 key={item.key}
                 className={active === item.key ? "active" : ""}
                 onClick={() => navigate(item.key)}
+                aria-current={active === item.key ? "page" : undefined}
               >
                 <Icon size={21} strokeWidth={1.9} />
-                <span>{item.key === "messages" ? "Mais" : item.label}</span>
+                <span>
+                  {item.key === "prospecting" ? "Prospectar" : item.label}
+                </span>
               </button>
             );
           })}

@@ -1,4 +1,10 @@
-import { ArrowRight, CalendarClock, Check, Flag } from "lucide-react";
+import {
+  ArrowRight,
+  CalendarClock,
+  Check,
+  ExternalLink,
+  Flag,
+} from "lucide-react";
 import type { Lead, Priority } from "../types";
 import { ContactActions } from "./ContactActions";
 import { StageBadge } from "./StageBadge";
@@ -60,6 +66,7 @@ export function LeadCard({
       className={`lead-card lead-card--stage-${stageClass(lead.stage)} ${
         selected ? "is-selected" : ""
       } ${lead.overdue ? "is-overdue" : ""}`}
+      data-priority={lead.priority.toLowerCase()}
     >
       {onSelectionChange && (
         <label
@@ -78,57 +85,68 @@ export function LeadCard({
         </label>
       )}
 
-      <button className="lead-card-main" onClick={onSelect}>
-        <span className="lead-card-avatar">{initials}</span>
-        <span className="lead-card-identity">
-          <strong>{lead.handle}</strong>
-          <small>{lead.category}</small>
-        </span>
-        <span className="lead-card-owner" title={`Responsável: ${ownerName(lead.owner)}`}>
-          {ownerName(lead.owner).slice(0, 1)}
-        </span>
-      </button>
+      <div className="lead-card-top">
+        <button className="lead-card-main" onClick={onSelect}>
+          <span className="lead-card-avatar">{initials}</span>
+          <span className="lead-card-identity">
+            <strong>{lead.handle}</strong>
+            <small>
+              {lead.category} · {ownerName(lead.owner)}
+            </small>
+          </span>
+        </button>
 
-      <div className="lead-card-meta">
-        <label
-          className={`priority-control priority-${lead.priority.toLowerCase()}`}
-          onClick={(event) => event.stopPropagation()}
-        >
-          <Flag size={13} fill="currentColor" />
-          <select
-            aria-label={`Prioridade de ${lead.handle}`}
-            value={lead.priority}
-            onChange={(event) =>
-              onPriorityChange(event.target.value as Priority)
-            }
+        <div className="lead-card-meta">
+          <label
+            className={`priority-control priority-${lead.priority.toLowerCase()}`}
+            onClick={(event) => event.stopPropagation()}
           >
-            {priorities.map((priority) => (
-              <option key={priority}>{priority}</option>
-            ))}
-          </select>
-        </label>
-        <StageBadge stage={lead.stage} />
+            <Flag size={13} fill="currentColor" />
+            <select
+              aria-label={`Prioridade de ${lead.handle}`}
+              value={lead.priority}
+              onChange={(event) =>
+                onPriorityChange(event.target.value as Priority)
+              }
+            >
+              {priorities.map((priority) => (
+                <option key={priority}>{priority}</option>
+              ))}
+            </select>
+          </label>
+          <StageBadge stage={lead.stage} />
+        </div>
       </div>
 
-      <button className="lead-card-next" onClick={onSelect}>
-        <ArrowRight size={17} />
-        <span>
-          <small>Próxima ação</small>
-          <strong>{lead.nextAction}</strong>
-        </span>
-      </button>
+      <div className="lead-card-action-row">
+        <button className="lead-card-next" onClick={onSelect}>
+          <ArrowRight size={18} />
+          <span>
+            <small>Próxima ação</small>
+            <strong>{lead.nextAction}</strong>
+          </span>
+          <span className={`lead-card-due ${lead.overdue ? "is-danger" : ""}`}>
+            <CalendarClock size={14} />
+            {lead.overdue ? "Atrasado" : `${lead.scheduleDay} · ${lead.dueTime}`}
+          </span>
+        </button>
 
-      <footer className="lead-card-footer">
-        <span className={lead.overdue ? "is-danger" : ""}>
-          <CalendarClock size={15} />
-          {lead.overdue ? "Atrasado" : lead.scheduleDay} · {lead.dueTime}
-        </span>
-        <ContactActions
-          lead={lead}
-          compact
-          onOpenMessages={onOpenMessages}
-        />
-      </footer>
+        <footer className="lead-card-footer" aria-label={`Ações de ${lead.handle}`}>
+          <ContactActions
+            lead={lead}
+            compact
+            onOpenMessages={onOpenMessages}
+          />
+          <button
+            className="quick-contact quick-contact--open"
+            onClick={onSelect}
+            aria-label={`Abrir ficha de ${lead.handle}`}
+            title="Abrir ficha completa"
+          >
+            <ExternalLink size={18} />
+          </button>
+        </footer>
+      </div>
     </article>
   );
 }

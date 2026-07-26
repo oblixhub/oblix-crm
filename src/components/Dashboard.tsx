@@ -130,6 +130,11 @@ export function Dashboard({
   const selectedVisibleCount = visibleLeads.filter((lead) =>
     selectedIds.has(lead.id),
   ).length;
+  const activeFilterCount =
+    Number(Boolean(query.trim())) +
+    Number(owner !== "Todos") +
+    Number(stage !== "Todos") +
+    Number(priority !== "Todas");
 
   const team = [
     {
@@ -170,8 +175,7 @@ export function Dashboard({
   return (
     <div className="operations-page">
       <header className="operations-header">
-        <div>
-          <span className="page-eyebrow">Central de trabalho</span>
+        <div className="operations-title">
           <h1>Fila de hoje</h1>
           <p>Veja o que precisa de atenção e avance um contato por vez.</p>
         </div>
@@ -194,13 +198,15 @@ export function Dashboard({
           </button>
           <button className="button button--secondary" onClick={onImport}>
             <Import size={19} />
-            Importar
+            <span>Importar</span>
           </button>
         </div>
       </header>
 
       {nextLead ? (
-        <section className="next-action-focus">
+        <section className="next-action-section" aria-labelledby="next-action-title">
+          <h2 id="next-action-title">Fazer agora</h2>
+          <div className="next-action-focus">
           <div className="next-action-icon">
             <ArrowRight size={25} />
           </div>
@@ -219,13 +225,17 @@ export function Dashboard({
             Abrir lead
             <ArrowRight size={18} />
           </button>
+          </div>
         </section>
       ) : (
-        <section className="next-action-focus is-empty">
-          <CheckSquare2 size={24} />
-          <div>
-            <strong>Fila concluída</strong>
-            <small>Não há ações pendentes neste filtro.</small>
+        <section className="next-action-section" aria-labelledby="next-action-title">
+          <h2 id="next-action-title">Fazer agora</h2>
+          <div className="next-action-focus is-empty">
+            <CheckSquare2 size={24} />
+            <div>
+              <strong>Fila concluída</strong>
+              <small>Não há ações pendentes neste filtro.</small>
+            </div>
           </div>
         </section>
       )}
@@ -282,7 +292,10 @@ export function Dashboard({
       <section className="weekly-queue">
         <div className="queue-section-heading">
           <div>
-            <h2>Fila completa</h2>
+            <h2>
+              <span className="desktop-label">Fila completa</span>
+              <span className="mobile-label">Próximos</span>
+            </h2>
             <p>{filteredLeads.length} contatos nesta visualização</p>
           </div>
           <button className="button button--quiet select-visible" onClick={toggleVisible}>
@@ -313,10 +326,11 @@ export function Dashboard({
           ))}
         </div>
 
-        <details className="queue-filters" open>
+        <details className="queue-filters">
           <summary>
             <ListFilter size={18} />
-            Buscar e filtrar
+            Filtrar fila
+            {activeFilterCount > 0 && <span>{activeFilterCount}</span>}
             <ChevronDown size={17} />
           </summary>
           <div className="queue-filterbar">
