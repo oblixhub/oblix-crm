@@ -39,6 +39,32 @@
   color: #00170d;
 }
 
+.auth-card .field input {
+  min-height: 48px;
+  font-size: 16px;
+}
+
+.auth-card .password-field input {
+  padding-right: 54px;
+}
+
+.auth-card .password-toggle {
+  right: 4px;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+}
+
+.auth-card .remember-access {
+  min-height: 44px;
+  font-size: 15px;
+}
+
+.auth-card .remember-access input {
+  width: 20px;
+  height: 20px;
+}
+
 .button {
   min-height: 46px;
   border-radius: 10px;
