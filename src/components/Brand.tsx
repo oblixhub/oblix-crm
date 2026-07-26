@@ -1,14 +1,15 @@
 export function Brand({ compact = false }: { compact?: boolean }) {
   return (
     <div className={`brand ${compact ? "brand--compact" : ""}`} aria-label="OBLIX">
-      <img
-        className="brand-symbol"
-        src="/brand/oblix-symbol.png"
-        width="1622"
-        height="565"
-        alt=""
-        aria-hidden="true"
-      />
+      <span className="brand-symbol-frame" aria-hidden="true">
+        <img
+          className="brand-symbol"
+          src="/brand/oblix-symbol-xx.svg"
+          width="96"
+          height="48"
+          alt=""
+        />
+      </span>
       {!compact && (
         <img
           className="brand-wordmark"
