@@ -69,6 +69,7 @@ type ImportedLead = {
   profileUrl: string;
   segment?: string;
   priority: Priority;
+  whatsappUrl?: string;
 };
 
 const normalizeColumn = (value: string) =>
@@ -83,6 +84,16 @@ const normalizeHandle = (value: string) => {
   const fromUrl = value.match(/instagram\.com\/([^/?#]+)/i)?.[1];
   const clean = (fromUrl ?? value).trim().replace(/^@/, "").replace(/\/$/, "");
   return clean ? `@${clean.toLowerCase()}` : "";
+};
+
+const normalizeWhatsappUrl = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  if (/^https?:\/\/(?:wa\.me|api\.whatsapp\.com|web\.whatsapp\.com)/i.test(trimmed)) {
+    return trimmed;
+  }
+  const digits = trimmed.replace(/\D/g, "");
+  return digits.length >= 10 ? `https://wa.me/${digits}` : undefined;
 };
 
 const parseLeadFile = async (file: File): Promise<ImportedLead[]> => {
@@ -150,6 +161,15 @@ const parseLeadFile = async (file: File): Promise<ImportedLead[]> => {
         getValue(row, ["segment", "segmento", "categoria", "nicho"]) ||
         undefined,
       priority,
+      whatsappUrl: normalizeWhatsappUrl(
+        getValue(row, [
+          "whatsapp",
+          "telefone",
+          "phone",
+          "contato",
+          "whatsapp url",
+        ]),
+      ),
     });
   });
   return [...unique.values()];
@@ -166,6 +186,7 @@ type DbLead = {
   site_status: string | null;
   offer_suggestion: string | null;
   has_whatsapp: boolean;
+  whatsapp_url?: string | null;
   validation_status: "pending" | "valid" | "discarded";
   professional_evidence: string | null;
   owner: string | null;
@@ -212,7 +233,7 @@ const mapDbLead = (row: DbLead, index: number): Lead => ({
   dueTime: "A definir",
   siteStatus: row.site_status === "Tem site" ? "Tem site" : row.site_status === "Sem site" ? "Sem site" : "Não verificado",
   instagramUrl: row.profile_url,
-  whatsappUrl: row.has_whatsapp ? undefined : undefined,
+  whatsappUrl: row.whatsapp_url ?? undefined,
   offer: row.offer_suggestion?.toLowerCase().includes("domínio") ? "Com domínio" : "Sem domínio",
   amount: row.offer_suggestion?.toLowerCase().includes("domínio") ? 250 : 200,
   paymentStatus: "Não aprovado",
@@ -567,6 +588,14 @@ export default function App() {
   };
 
   const createManualLead = async (lead: Lead) => {
+    const alreadyExists = leads.some(
+      (currentLead) => currentLead.handle.toLowerCase() === lead.handle.toLowerCase(),
+    );
+    if (alreadyExists) {
+      showToast("Este perfil j\u00e1 existe no CRM.");
+      return;
+    }
+
     if (!supabase || !session) {
       setLeads((current) => [lead, ...current]);
       setModal(null);
@@ -591,6 +620,7 @@ export default function App() {
         site_status: "Não verificado",
         has_instagram: true,
         has_whatsapp: Boolean(lead.whatsappUrl),
+        whatsapp_url: lead.whatsappUrl ?? null,
         source_name: "Cadastro manual",
         source_type: "manual",
         next_action: "Abrir perfil e validar",
@@ -628,7 +658,7 @@ export default function App() {
     const existingHandles = new Set(
       leads.map((lead) => lead.handle.toLowerCase()),
     );
-    const fresh = parsed.filter(
+    let fresh = parsed.filter(
       (lead) => !existingHandles.has(lead.handle.toLowerCase()),
     );
     if (fresh.length === 0) {
@@ -648,7 +678,7 @@ export default function App() {
         category: row.segment ?? "A classificar",
         validationStatus: "pending",
         batchName,
-        sourceType: "excel",
+        sourceType: "instagram",
         owner: "Você",
         stage: "Validar",
         nextAction: "Abrir perfil e validar",
@@ -687,11 +717,44 @@ export default function App() {
       return;
     }
 
+    const { data: remoteLeads, error: remoteLeadsError } = await supabase
+      .from("leads")
+      .select("handle")
+      .in(
+        "handle",
+        parsed.map((lead) => lead.handle),
+      );
+    if (remoteLeadsError) {
+      showToast(`N\u00e3o foi poss\u00edvel verificar perfis existentes: ${remoteLeadsError.message}`);
+      return;
+    }
+
+    const remoteHandles = new Set(
+      (remoteLeads ?? []).map((lead) => lead.handle.toLowerCase()),
+    );
+    fresh = fresh.filter((lead) => !remoteHandles.has(lead.handle.toLowerCase()));
+    if (fresh.length === 0) {
+      showToast("Todos os perfis da planilha j\u00e1 existem no CRM.");
+      return;
+    }
+
     const monday = new Date();
     const deltaToMonday = (monday.getDay() + 6) % 7;
     monday.setDate(monday.getDate() - deltaToMonday);
     const weekStart = monday.toISOString().slice(0, 10);
-    const { data: batch, error: batchError } = await supabase
+    const { data: existingBatch, error: existingBatchError } = await supabase
+      .from("lead_batches")
+      .select("id, name")
+      .eq("name", batchName)
+      .maybeSingle();
+    if (existingBatchError) {
+      showToast(`N\u00e3o foi poss\u00edvel localizar o lote: ${existingBatchError.message}`);
+      return;
+    }
+
+    const { data: createdBatch, error: batchError } = existingBatch
+      ? { data: existingBatch, error: null }
+      : await supabase
       .from("lead_batches")
       .insert({
         name: batchName,
@@ -702,6 +765,8 @@ export default function App() {
       })
       .select("id, name")
       .single();
+
+    const batch = createdBatch;
 
     if (batchError || !batch) {
       showToast(
@@ -726,8 +791,10 @@ export default function App() {
       is_validated: false,
       prospecting_done: false,
       has_instagram: true,
+      has_whatsapp: Boolean(lead.whatsappUrl),
+      whatsapp_url: lead.whatsappUrl ?? null,
       source_name: file.name,
-      source_type: "excel",
+      source_type: "instagram",
       validation_status: "pending",
       next_action: "Abrir perfil e validar",
       batch_id: batch.id,
@@ -739,7 +806,11 @@ export default function App() {
       .select("*, lead_batches(id, name, week_start, status)");
 
     if (error || !data) {
-      showToast(`O lote foi criado, mas os leads falharam: ${error?.message}`);
+      showToast(
+        error?.code === "23505"
+          ? "Um destes perfis j\u00e1 foi inclu\u00eddo por outra pessoa. Atualize a tela e importe apenas os restantes."
+          : `O lote foi criado, mas os leads falharam: ${error?.message}`,
+      );
       return;
     }
 
