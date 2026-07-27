@@ -111,7 +111,7 @@
 }
 
 :root[data-theme="dark"] .brand-symbol {
-  filter: invert(1);
+  filter: invert(1) !important;
 }
 
 .brand-wordmark {
@@ -130,6 +130,14 @@
 
 .auth-brand {
   margin-bottom: 4px;
+}
+
+.auth-brand .brand-symbol {
+  filter: invert(1);
+}
+
+.auth-brand .brand-wordmark {
+  filter: invert(1);
 }
 
 .auth-brand .brand {

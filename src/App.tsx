@@ -38,6 +38,40 @@ type ModalState =
   | { type: "scripts"; leadId: number }
   | null;
 
+const CRM_WORKSPACE_STORAGE_KEY = "oblix-crm-workspace-v1";
+const navKeys: readonly NavKey[] = [
+  "dashboard",
+  "validation",
+  "prospecting",
+  "leads",
+  "previews",
+  "finance",
+  "messages",
+];
+
+type CrmWorkspace = {
+  activeNav?: NavKey;
+  selectedLeadId?: number | null;
+};
+
+const loadCrmWorkspace = (): CrmWorkspace => {
+  try {
+    const saved = window.sessionStorage.getItem(CRM_WORKSPACE_STORAGE_KEY);
+    if (!saved) return {};
+    const parsed = JSON.parse(saved) as Record<string, unknown>;
+    const activeNav =
+      typeof parsed.activeNav === "string" &&
+      navKeys.includes(parsed.activeNav as NavKey)
+        ? (parsed.activeNav as NavKey)
+        : undefined;
+    const selectedLeadId =
+      typeof parsed.selectedLeadId === "number" ? parsed.selectedLeadId : null;
+    return { activeNav, selectedLeadId };
+  } catch {
+    return {};
+  }
+};
+
 const nowLabel = () =>
   new Intl.DateTimeFormat("pt-BR", {
     hour: "2-digit",
@@ -314,8 +348,13 @@ export default function App() {
   const [templates, setTemplates] = useState<MessageTemplate[]>(
     loadMessageTemplates,
   );
-  const [activeNav, setActiveNav] = useState<NavKey>("dashboard");
-  const [selectedLeadId, setSelectedLeadId] = useState<number | null>(null);
+  const [restoredWorkspace] = useState(loadCrmWorkspace);
+  const [activeNav, setActiveNav] = useState<NavKey>(
+    () => restoredWorkspace.activeNav ?? "dashboard",
+  );
+  const [selectedLeadId, setSelectedLeadId] = useState<number | null>(
+    () => restoredWorkspace.selectedLeadId ?? null,
+  );
   const [modal, setModal] = useState<ModalState>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [publishingPreviewForId, setPublishingPreviewForId] = useState<number | null>(null);
@@ -362,8 +401,8 @@ export default function App() {
           );
           setLeads(mapped);
           if (
-            mapped.some((lead) => lead.validationStatus === "pending") &&
-            !mapped.some((lead) => lead.validationStatus === "valid")
+            !restoredWorkspace.activeNav &&
+            mapped.some((lead) => lead.validationStatus === "pending")
           ) {
             setActiveNav("validation");
           }
@@ -374,7 +413,7 @@ export default function App() {
     return () => {
       active = false;
     };
-  }, [session]);
+  }, [restoredWorkspace.activeNav, session]);
 
   const selectedLead = useMemo(
     () => leads.find((lead) => lead.id === selectedLeadId) ?? null,
@@ -392,6 +431,17 @@ export default function App() {
       JSON.stringify(templates),
     );
   }, [templates]);
+
+  useEffect(() => {
+    try {
+      window.sessionStorage.setItem(
+        CRM_WORKSPACE_STORAGE_KEY,
+        JSON.stringify({ activeNav, selectedLeadId }),
+      );
+    } catch {
+      // If storage is unavailable, the CRM continues normally without restoring context.
+    }
+  }, [activeNav, selectedLeadId]);
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0 });

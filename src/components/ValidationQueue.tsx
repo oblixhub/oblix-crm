@@ -16,7 +16,7 @@ import {
   UserRoundCheck,
   UsersRound,
 } from "lucide-react";
-import { useDeferredValue, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { ownerLabels, owners } from "../types";
 import type {
   Lead,
@@ -56,6 +56,40 @@ const statusLabels: Record<ValidationStatus, string> = {
   discarded: "Descartados",
 };
 
+const VALIDATION_WORKSPACE_STORAGE_KEY = "oblix-crm-validation-workspace-v1";
+
+type ValidationWorkspace = {
+  activeBatch?: string;
+  status?: ValidationStatus;
+  selectedId?: number | null;
+  validationMode?: "individual" | "batch";
+};
+
+const loadValidationWorkspace = (): ValidationWorkspace => {
+  try {
+    const saved = window.sessionStorage.getItem(VALIDATION_WORKSPACE_STORAGE_KEY);
+    if (!saved) return {};
+    const parsed = JSON.parse(saved) as Record<string, unknown>;
+    return {
+      activeBatch:
+        typeof parsed.activeBatch === "string" ? parsed.activeBatch : undefined,
+      status:
+        parsed.status === "pending" ||
+        parsed.status === "valid" ||
+        parsed.status === "discarded"
+          ? parsed.status
+          : undefined,
+      selectedId: typeof parsed.selectedId === "number" ? parsed.selectedId : null,
+      validationMode:
+        parsed.validationMode === "batch" || parsed.validationMode === "individual"
+          ? parsed.validationMode
+          : undefined,
+    };
+  } catch {
+    return {};
+  }
+};
+
 export function ValidationQueue({
   leads,
   onValidate,
@@ -64,18 +98,34 @@ export function ValidationQueue({
   onNewLead,
   onImport,
 }: ValidationQueueProps) {
-  const batches = useMemo(
-    () =>
-      [...new Set(leads.map((lead) => lead.batchName))].sort((a, b) =>
-        b.localeCompare(a, "pt-BR", { numeric: true }),
-      ),
-    [leads],
+  const batches = useMemo(() => {
+    const pendingByBatch = new Map<string, number>();
+    leads.forEach((lead) => {
+      const pending = pendingByBatch.get(lead.batchName) ?? 0;
+      pendingByBatch.set(
+        lead.batchName,
+        pending + Number(lead.validationStatus === "pending"),
+      );
+    });
+
+    return [...pendingByBatch.keys()].sort((a, b) => {
+      const pendingDifference =
+        (pendingByBatch.get(b) ?? 0) - (pendingByBatch.get(a) ?? 0);
+      return pendingDifference || a.localeCompare(b, "pt-BR", { numeric: true });
+    });
+  }, [leads]);
+  const [restoredWorkspace] = useState(loadValidationWorkspace);
+  const [activeBatch, setActiveBatch] = useState(
+    () => restoredWorkspace.activeBatch ?? "",
   );
-  const [activeBatch, setActiveBatch] = useState(() => batches[0] ?? "Lote 1");
-  const [status, setStatus] = useState<ValidationStatus>("pending");
+  const [status, setStatus] = useState<ValidationStatus>(
+    () => restoredWorkspace.status ?? "pending",
+  );
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedId, setSelectedId] = useState<number | null>(
+    () => restoredWorkspace.selectedId ?? null,
+  );
   const [priority, setPriority] = useState<Priority>("Normal");
   const [owner, setOwner] = useState<Owner>("Você");
   const [nextAction, setNextAction] = useState("Enviar mensagem inicial");
@@ -84,9 +134,27 @@ export function ValidationQueue({
   const [discardReason, setDiscardReason] = useState("");
   const [validationMode, setValidationMode] = useState<
     "individual" | "batch"
-  >("individual");
+  >(() => restoredWorkspace.validationMode ?? "individual");
   const [batchOwner, setBatchOwner] = useState<Owner>("Você");
   const [confirmBatch, setConfirmBatch] = useState(false);
+
+  useEffect(() => {
+    if (!batches.length) return;
+    setActiveBatch((current) =>
+      current && batches.includes(current) ? current : batches[0],
+    );
+  }, [batches]);
+
+  useEffect(() => {
+    try {
+      window.sessionStorage.setItem(
+        VALIDATION_WORKSPACE_STORAGE_KEY,
+        JSON.stringify({ activeBatch, status, selectedId, validationMode }),
+      );
+    } catch {
+      // The validation queue remains usable if browser storage is unavailable.
+    }
+  }, [activeBatch, selectedId, status, validationMode]);
 
   const batchLeads = leads.filter((lead) => lead.batchName === activeBatch);
   const counts = {
