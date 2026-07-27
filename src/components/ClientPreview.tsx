@@ -19,35 +19,43 @@ export function ClientPreview({
         Preview protegido · versão {lead.preview.version ?? 1}
       </div>
 
-      <div className="sample-site client-site-preview">
-        <nav>
-          <strong>{lead.category}</strong>
-          <span>Início &nbsp; Serviços &nbsp; Contato</span>
-        </nav>
-        <div>
-          <span className="sample-site-kicker">Atendimento profissional</span>
-          <h2>Um site claro para apresentar seu trabalho</h2>
-          <p>
-            Conheça os serviços, tire suas dúvidas e fale diretamente pelo
-            WhatsApp.
-          </p>
-          <button>Falar no WhatsApp</button>
+      {lead.preview.publicUrl ? (
+        <iframe
+          className="client-site-frame"
+          src={lead.preview.publicUrl}
+          title={`Preview de ${lead.handle}`}
+        />
+      ) : (
+        <div className="sample-site client-site-preview">
+          <nav>
+            <strong>{lead.category}</strong>
+            <span>Início &nbsp; Serviços &nbsp; Contato</span>
+          </nav>
+          <div>
+            <span className="sample-site-kicker">Atendimento profissional</span>
+            <h2>Um site claro para apresentar seu trabalho</h2>
+            <p>
+              Conheça os serviços, tire suas dúvidas e fale diretamente pelo
+              WhatsApp.
+            </p>
+            <button>Falar no WhatsApp</button>
+          </div>
+          <section className="sample-site-services">
+            <article>
+              <strong>Atendimento personalizado</strong>
+              <p>Uma experiência pensada para cada necessidade.</p>
+            </article>
+            <article>
+              <strong>Contato fácil</strong>
+              <p>Informações objetivas e acesso rápido ao WhatsApp.</p>
+            </article>
+            <article>
+              <strong>Apresentação profissional</strong>
+              <p>Serviços organizados para facilitar a decisão.</p>
+            </article>
+          </section>
         </div>
-        <section className="sample-site-services">
-          <article>
-            <strong>Atendimento personalizado</strong>
-            <p>Uma experiência pensada para cada necessidade.</p>
-          </article>
-          <article>
-            <strong>Contato fácil</strong>
-            <p>Informações objetivas e acesso rápido ao WhatsApp.</p>
-          </article>
-          <article>
-            <strong>Apresentação profissional</strong>
-            <p>Serviços organizados para facilitar a decisão.</p>
-          </article>
-        </section>
-      </div>
+      )}
 
       <aside className="client-review-widget" aria-label="Avaliação do site">
         <span>O que achou do site?</span>

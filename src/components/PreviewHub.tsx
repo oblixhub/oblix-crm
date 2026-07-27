@@ -47,7 +47,8 @@ export function PreviewHub({
             <div className="preview-list-copy">
               <strong>{lead.handle}</strong>
               <span>
-                sites.oblixhub.com/{lead.preview.publicSlug}
+                {lead.preview.publicUrl ??
+                  `sites.oblixhub.com/${lead.preview.publicSlug}`}
               </span>
             </div>
             <div className="preview-list-status">

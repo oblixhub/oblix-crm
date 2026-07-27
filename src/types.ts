@@ -60,6 +60,7 @@ export interface PreviewState {
   status: "none" | "processing" | "ready" | "viewed" | "approved";
   version?: number;
   fileName?: string;
+  publicUrl?: string;
   publicSlug: string;
   checklist: {
     index: boolean;

@@ -2982,6 +2982,14 @@ textarea {
     #f7f4ed;
 }
 
+.client-site-frame {
+  display: block;
+  width: 100%;
+  min-height: min(78vh, 780px);
+  border: 0;
+  background: white;
+}
+
 .client-site-preview nav {
   padding: 28px clamp(24px, 5vw, 72px);
 }

@@ -199,6 +199,10 @@ type DbLead = {
   discard_reason?: string | null;
   source_type?: "excel" | "manual" | "instagram" | null;
   batch_id?: string | null;
+  preview_url?: string | null;
+  preview_file_name?: string | null;
+  preview_version?: number | null;
+  preview_published_at?: string | null;
   lead_batches?: {
     id: string;
     name: string;
@@ -239,7 +243,22 @@ const mapDbLead = (row: DbLead, index: number): Lead => ({
   amount: row.offer_suggestion?.toLowerCase().includes("domínio") ? 250 : 200,
   paymentStatus: "Não aprovado",
   activities: [{ id: index + 1, kind: "validation", title: "Importado do Excel", detail: row.professional_evidence ?? "Aguardando validação manual do perfil.", time: "Importado agora", author: "Sistema" }],
-  preview: { status: "none", publicSlug: row.handle.replace(/^@/, ""), checklist: { index: false, relativePaths: false, protectedAccess: false } },
+  preview: {
+    status: row.preview_url
+      ? row.stage === "Aprovação"
+        ? "approved"
+        : "ready"
+      : "none",
+    version: row.preview_version ?? undefined,
+    fileName: row.preview_file_name ?? undefined,
+    publicUrl: row.preview_url ?? undefined,
+    publicSlug: row.handle.replace(/^@/, ""),
+    checklist: {
+      index: Boolean(row.preview_url),
+      relativePaths: Boolean(row.preview_url),
+      protectedAccess: Boolean(row.preview_url),
+    },
+  },
 });
 
 const toDbPatch = (lead: Lead) => ({
@@ -254,6 +273,9 @@ const toDbPatch = (lead: Lead) => ({
   discard_reason: lead.discardReason ?? null,
   next_action: lead.nextAction,
   next_action_at: lead.nextActionAt ?? null,
+  preview_url: lead.preview.publicUrl ?? null,
+  preview_file_name: lead.preview.fileName ?? null,
+  preview_version: lead.preview.version ?? null,
   updated_at: new Date().toISOString(),
 });
 
