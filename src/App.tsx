@@ -1,4 +1,4 @@
-import { Eye, EyeOff, FileSpreadsheet, Plus, UploadCloud } from "lucide-react";
+﻿import { Eye, EyeOff, FileSpreadsheet, Plus, UploadCloud } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { AppShell } from "./components/AppShell";
 import { Brand } from "./components/Brand";
@@ -49,6 +49,13 @@ const navKeys: readonly NavKey[] = [
   "finance",
   "messages",
 ];
+
+const UNDO_DELETE_TIMEOUT_MS = 10_000;
+
+type UndoDeleteState = {
+  lead: Lead;
+  index: number;
+};
 
 type CrmWorkspace = {
   activeNav?: NavKey;
@@ -241,6 +248,7 @@ type DbLead = {
   preview_slug?: string | null;
   preview_site_url?: string | null;
   preview_source_path?: string | null;
+  preview_requires_login?: boolean | null;
   lead_batches?: {
     id: string;
     name: string;
@@ -309,6 +317,7 @@ const mapDbLead = (row: DbLead, index: number): Lead => ({
     version: row.preview_version ?? undefined,
     fileName: row.preview_file_name ?? undefined,
     publicUrl: row.preview_url ?? undefined,
+    requiresLogin: Boolean(row.preview_requires_login),
     siteUrl: row.preview_site_url ?? undefined,
     sourcePath: row.preview_source_path ?? undefined,
     slug: row.preview_slug ?? undefined,
@@ -334,6 +343,7 @@ const toDbPatch = (lead: Lead) => ({
   next_action: lead.nextAction,
   next_action_at: lead.nextActionAt ?? null,
   preview_url: lead.preview.publicUrl ?? null,
+  preview_requires_login: lead.preview.requiresLogin ?? false,
   preview_file_name: lead.preview.fileName ?? null,
   preview_version: lead.preview.version ?? null,
   preview_slug: lead.preview.slug ?? null,
@@ -379,6 +389,8 @@ export default function App() {
   );
   const [modal, setModal] = useState<ModalState>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [pendingUndo, setPendingUndo] = useState<UndoDeleteState | null>(null);
+  const [undoCountdown, setUndoCountdown] = useState(0);
   const [publishingPreviewForId, setPublishingPreviewForId] = useState<number | null>(null);
   const [deletingLeadId, setDeletingLeadId] = useState<number | null>(null);
   const [theme, setTheme] = useState<"light" | "dark">(() => {
@@ -386,6 +398,10 @@ export default function App() {
     return saved === "light" ? "light" : "dark";
   });
   const toastTimeoutRef = useRef<number | null>(null);
+  const undoTimeoutRef = useRef<number | null>(null);
+  const undoCountdownRef = useRef<number | null>(null);
+  const pendingUndoRef = useRef<UndoDeleteState | null>(null);
+  const previewRequiresLoginColumnSupported = useRef<boolean | null>(null);
 
   useEffect(() => {
     if (!supabase) return;
@@ -484,16 +500,84 @@ export default function App() {
       if (toastTimeoutRef.current !== null) {
         window.clearTimeout(toastTimeoutRef.current);
       }
+      if (undoTimeoutRef.current !== null) {
+        window.clearTimeout(undoTimeoutRef.current);
+      }
+      if (undoCountdownRef.current !== null) {
+        window.clearInterval(undoCountdownRef.current);
+      }
+      pendingUndoRef.current = null;
     },
     [],
   );
 
-  const showToast = (message: string) => {
+  const showToast = (message: string, durationMs = 3200) => {
     if (toastTimeoutRef.current !== null) {
       window.clearTimeout(toastTimeoutRef.current);
     }
     setToast(message);
-    toastTimeoutRef.current = window.setTimeout(() => setToast(null), 3200);
+    toastTimeoutRef.current = window.setTimeout(() => setToast(null), durationMs);
+  };
+
+  const clearUndoCountdown = () => {
+    if (undoTimeoutRef.current !== null) {
+      window.clearTimeout(undoTimeoutRef.current);
+      undoTimeoutRef.current = null;
+    }
+    if (undoCountdownRef.current !== null) {
+      window.clearInterval(undoCountdownRef.current);
+      undoCountdownRef.current = null;
+    }
+  };
+
+  const insertLeadAtIndex = (current: Lead[], lead: Lead, index: number) => {
+    const next = [...current];
+    const safeIndex = Math.max(0, Math.min(index, next.length));
+    next.splice(safeIndex, 0, lead);
+    return next;
+  };
+
+  const finalizeLeadDeletion = async (pending: UndoDeleteState) => {
+    const { lead, index } = pending;
+    try {
+      if (supabase && session && lead.remoteId) {
+        const { error } = await supabase
+          .from("leads")
+          .delete()
+          .eq("id", lead.remoteId);
+        if (error) {
+          throw new Error(error.message);
+        }
+      }
+
+      await removeStorageArtifacts(lead);
+      showToast(`${lead.handle} removido permanentemente.`);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "NÃ£o foi possÃ­vel remover no momento.";
+      setLeads((current) => insertLeadAtIndex(current, lead, index));
+      showToast(`NÃ£o foi possÃ­vel remover ${lead.handle}: ${message}`);
+    } finally {
+      if (deletingLeadId === lead.id) setDeletingLeadId(null);
+      if (pendingUndoRef.current?.lead.id === lead.id) {
+        pendingUndoRef.current = null;
+        setPendingUndo(null);
+        setUndoCountdown(0);
+      }
+    }
+  };
+
+  const undoLeadDeletion = () => {
+    const pending = pendingUndoRef.current;
+    if (!pending) return;
+
+    clearUndoCountdown();
+    setPendingUndo(null);
+    setUndoCountdown(0);
+    pendingUndoRef.current = null;
+    setDeletingLeadId((current) => (current === pending.lead.id ? null : current));
+    setLeads((current) => insertLeadAtIndex(current, pending.lead, pending.index));
+    showToast(`${pending.lead.handle} restaurado.`);
   };
 
   const resolvePreviewFolderFromUrl = (siteUrl?: string | null) => {
@@ -612,18 +696,69 @@ export default function App() {
     setSigningOut(false);
   };
 
+  const isColumnMissingError = (message: string) =>
+    /preview_requires_login/.test(message) &&
+    /(does not exist|coluna|doesn't exist|não existe|não foi encontrada|not found|not exist)/i.test(
+      message,
+    );
+
+  const saveLeadPatch = async (lead: Lead) => {
+    if (!supabase || !session || !lead.remoteId) return;
+
+    const patch = toDbPatch(lead);
+
+    const { error: primaryError } = await supabase
+      .from("leads")
+      .update(patch)
+      .eq("id", lead.remoteId);
+
+    if (!primaryError) {
+      previewRequiresLoginColumnSupported.current = true;
+      return;
+    }
+
+    const primaryMessage = primaryError.message ?? "";
+
+    if (
+      previewRequiresLoginColumnSupported.current !== false &&
+      isColumnMissingError(primaryMessage)
+    ) {
+      const fallbackPatch = { ...patch } as Record<string, unknown>;
+      delete fallbackPatch.preview_requires_login;
+
+      const { error: fallbackError } = await supabase
+        .from("leads")
+        .update(fallbackPatch)
+        .eq("id", lead.remoteId);
+
+      if (!fallbackError) {
+        previewRequiresLoginColumnSupported.current = false;
+        return;
+      }
+
+      if (isColumnMissingError(fallbackError.message ?? "")) {
+        previewRequiresLoginColumnSupported.current = false;
+        return;
+      }
+
+      showToast(`Não foi possível salvar: ${fallbackError.message}`);
+      return;
+    }
+
+    if (previewRequiresLoginColumnSupported.current === null && isColumnMissingError(primaryMessage)) {
+      previewRequiresLoginColumnSupported.current = false;
+      return;
+    }
+
+    showToast(`Não foi possível salvar: ${primaryMessage}`);
+  };
+
   const updateLead = (leadId: number, updater: (lead: Lead) => Lead) => {
     setLeads((current) => {
       const next = current.map((lead) => (lead.id === leadId ? updater(lead) : lead));
       const changed = next.find((lead) => lead.id === leadId);
-      if (supabase && session && changed?.remoteId) {
-        void supabase
-          .from("leads")
-          .update(toDbPatch(changed))
-          .eq("id", changed.remoteId)
-          .then(({ error }) => {
-            if (error) showToast(`Não foi possível salvar: ${error.message}`);
-          });
+      if (changed) {
+        void saveLeadPatch(changed);
       }
       return next;
     });
@@ -638,36 +773,61 @@ export default function App() {
     );
     if (!confirmRemoval) return;
     const confirmFinal = window.confirm(
-      "Essa exclusão é irreversível e não pode ser desfeita. Confirmar?",
+      "Essa exclusao tem 10 segundos para desfazer.",
     );
     if (!confirmFinal) return;
+    if (pendingUndoRef.current) {
+      showToast("Termine a exclusao anterior (desfazer ou aguardar) antes de excluir outro.");
+      return;
+    }
 
     setDeletingLeadId(leadId);
 
-    try {
-      if (supabase && session && targetLead.remoteId) {
-        const { error } = await supabase
-          .from("leads")
-          .delete()
-          .eq("id", targetLead.remoteId);
-        if (error) {
-          showToast(`NÃ£o foi possÃ­vel remover lead: ${error.message}`);
-          return;
-        }
-      }
+    const pending: UndoDeleteState = {
+      lead: targetLead,
+      index: leads.findIndex((lead) => lead.id === leadId),
+    };
 
-      setLeads((current) => current.filter((lead) => lead.id !== leadId));
-      if (selectedLeadId === leadId) {
-        setSelectedLeadId(null);
-        setActiveNav("leads");
-      }
-      void removeStorageArtifacts(targetLead);
-      showToast(`${targetLead.handle} removido permanentemente.`);
-    } finally {
-      setDeletingLeadId(null);
+    setLeads((current) => current.filter((lead) => lead.id !== leadId));
+    if (selectedLeadId === leadId) {
+      setSelectedLeadId(null);
+      setActiveNav("leads");
     }
-  };
 
+    pendingUndoRef.current = pending;
+    setPendingUndo(pending);
+    setUndoCountdown(Math.ceil(UNDO_DELETE_TIMEOUT_MS / 1000));
+    clearUndoCountdown();
+
+    const startedAt = Date.now();
+    undoCountdownRef.current = window.setInterval(() => {
+      const remainingMs = Math.max(
+        0,
+        UNDO_DELETE_TIMEOUT_MS - (Date.now() - startedAt),
+      );
+      const remainingSeconds = Math.max(0, Math.ceil(remainingMs / 1000));
+      setUndoCountdown(remainingSeconds);
+
+      if (remainingMs <= 0) {
+        clearUndoCountdown();
+      }
+    }, 1000);
+
+    undoTimeoutRef.current = window.setTimeout(() => {
+      const currentPending = pendingUndoRef.current;
+      if (!currentPending || currentPending.lead.id !== leadId) {
+        return;
+      }
+
+      pendingUndoRef.current = null;
+      setPendingUndo(null);
+      setUndoCountdown(0);
+      clearUndoCountdown();
+      void finalizeLeadDeletion(currentPending);
+    }, UNDO_DELETE_TIMEOUT_MS);
+
+    showToast(`${targetLead.handle} removido temporariamente.`, UNDO_DELETE_TIMEOUT_MS + 400);
+  };
   const addActivity = (
     lead: Lead,
     activity: Omit<Activity, "id" | "time">,
@@ -986,6 +1146,7 @@ export default function App() {
         ],
         preview: {
           status: "none",
+          requiresLogin: false,
           publicSlug: row.handle.replace(/^@/, ""),
           checklist: {
             index: false,
@@ -1230,12 +1391,13 @@ export default function App() {
             ...lead,
             stage: "Preview",
             nextAction: "Enviar acesso ao cliente",
-            preview: {
-              ...lead.preview,
-              status: "ready",
-              version: data.version ?? (lead.preview.version ?? 0) + 1,
-              fileName: file.name,
-              publicUrl: previewUrl,
+        preview: {
+          ...lead.preview,
+          status: "ready",
+          requiresLogin: lead.preview.requiresLogin,
+          version: data.version ?? (lead.preview.version ?? 0) + 1,
+          fileName: file.name,
+          publicUrl: previewUrl,
               siteUrl,
               sourcePath,
               slug: data.previewSlug ?? previewUrl.split("/").pop(),
@@ -1378,9 +1540,41 @@ export default function App() {
     }
   };
 
+  const openClientSharePreview = (leadId?: number) => {
+    const id = leadId ?? selectedLead?.id;
+    const lead = leads.find((item) => item.id === id);
+    if (!lead) return;
+
+    const previewSource = resolveLeadPreviewSource(lead.preview, { forClient: true });
+    if (!previewSource.url) {
+      showToast(
+        previewSource.message ??
+          "Republique o lead para gerar a URL de preview protegida.",
+      );
+      return;
+    }
+
+    window.open(previewSource.url, "_blank", "noopener,noreferrer");
+  };
+
+  const updatePreviewAccessMode = (
+    leadId: number,
+    requiresLogin: boolean,
+  ) => {
+    updateLead(leadId, (lead) => ({
+      ...lead,
+      preview: {
+        ...lead.preview,
+        requiresLogin,
+      },
+    }));
+  };
+
   const copyPreviewLink = () => {
     if (!selectedLead) return;
-    const previewSource = resolveLeadPreviewSource(selectedLead.preview);
+    const previewSource = resolveLeadPreviewSource(selectedLead.preview, {
+      forClient: true,
+    });
     if (!previewSource.url) {
       showToast(
         previewSource.message ??
@@ -1482,7 +1676,11 @@ export default function App() {
         onAddNote={addNote}
         onUpload={uploadPreview}
         previewPublishing={publishingPreviewForId === selectedLead.id}
-        onOpenClientPreview={() => openClientPreview()}
+        onOpenClientPreview={() => openClientSharePreview(selectedLead.id)}
+        onOpenTeamPreview={() => openClientPreview(selectedLead.id)}
+        onTogglePreviewMode={(requiresLogin) =>
+          updatePreviewAccessMode(selectedLead.id, requiresLogin)
+        }
         onCopyPreviewLink={copyPreviewLink}
         onMarkPaid={markPaid}
         onOpenMessages={() => openMessages()}
@@ -1649,7 +1847,22 @@ export default function App() {
         </Modal>
       )}
 
-      {toast && <div className="toast">{toast}</div>}
+      {toast && (
+        <div className="toast">
+          <div className="toast-content">
+            <span>{toast}</span>
+            {pendingUndo && (
+              <button
+                type="button"
+                className="button toast-action-button"
+                onClick={() => void undoLeadDeletion()}
+              >
+                Desfazer {undoCountdown > 0 ? `(${undoCountdown}s)` : ""}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -1709,6 +1922,7 @@ function NewLeadForm({
       ],
       preview: {
         status: "none",
+        requiresLogin: false,
         publicSlug: slug,
         checklist: {
           index: false,

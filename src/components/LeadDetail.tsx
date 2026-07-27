@@ -51,6 +51,8 @@ interface LeadDetailProps {
   onUpload: (file: File) => Promise<void>;
   previewPublishing: boolean;
   onOpenClientPreview: () => void;
+  onOpenTeamPreview: () => void;
+  onTogglePreviewMode: (requiresLogin: boolean) => void;
   onCopyPreviewLink: () => void;
   onMarkPaid: () => void;
   onOpenMessages: () => void;
@@ -67,6 +69,8 @@ export function LeadDetail({
   onUpload,
   previewPublishing,
   onOpenClientPreview,
+  onOpenTeamPreview,
+  onTogglePreviewMode,
   onCopyPreviewLink,
   onMarkPaid,
   onOpenMessages,
@@ -304,6 +308,25 @@ export function LeadDetail({
               </li>
             </ul>
 
+            <label className="field">
+              <span>Modo de acesso do preview</span>
+              <select
+                value={lead.preview.requiresLogin ? "login" : "token"}
+                onChange={(event) =>
+                  onTogglePreviewMode(event.target.value === "login")
+                }
+                disabled={previewPublishing}
+              >
+                <option value="token">Link direto (sem login)</option>
+                <option value="login">Login + senha (Instagram)</option>
+              </select>
+              <small>
+                {lead.preview.requiresLogin
+                  ? "Cliente entra pelo link com usuário e senha."
+                  : "Cliente entra pelo link direto com token seguro."}
+              </small>
+            </label>
+
             {lead.preview.status !== "none" && (
               <div className="preview-link-actions">
                 <button className="button button--secondary" onClick={onOpenClientPreview}>
@@ -312,6 +335,13 @@ export function LeadDetail({
                 </button>
                 <button className="button button--quiet" onClick={onCopyPreviewLink}>
                   Copiar link
+                </button>
+                <button
+                  className="button button--quiet"
+                  onClick={onOpenTeamPreview}
+                  disabled={previewPublishing}
+                >
+                  Abrir preview interno
                 </button>
               </div>
             )}

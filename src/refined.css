@@ -2134,6 +2134,30 @@ textarea {
   color: var(--app-surface);
 }
 
+.toast-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.toast-content span {
+  flex: 1;
+  line-height: 1.4;
+  font-size: 12px;
+}
+
+.toast-action-button {
+  min-height: 30px;
+  padding: 6px 10px;
+  border: 1px solid color-mix(in srgb, var(--app-surface) 32%, transparent);
+  background: color-mix(in srgb, var(--app-surface) 18%, transparent);
+  color: var(--app-surface);
+}
+
+.toast-action-button:hover {
+  background: color-mix(in srgb, var(--app-surface) 30%, transparent);
+}
+
 .form-grid-two {
   display: grid;
   grid-template-columns: 1fr 1fr;

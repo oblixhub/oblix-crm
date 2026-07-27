@@ -6,6 +6,8 @@ export interface PreviewUrlDecision {
 }
 
 type PreviewSource = {
+  requiresLogin?: boolean;
+  slug?: string;
   siteUrl?: string;
   publicUrl?: string;
 };
@@ -46,7 +48,49 @@ const normalizePreviewSource = (rawValue: string) => {
   return `${normalizedPath}${parsed.search}${parsed.hash}`;
 };
 
-export const resolveLeadPreviewSource = (lead: PreviewSource | undefined) => {
+const normalizePreviewPortal = (rawValue: string) => {
+  const trimmed = rawValue.trim();
+  if (!trimmed) return null;
+
+  const fallbackOrigin =
+    (typeof window !== "undefined" && window.location.origin) || "https://localhost";
+  const parsed = new URL(trimmed, fallbackOrigin);
+  if (!parsed.pathname.startsWith("/preview/")) return null;
+
+  const normalizedPath = parsed.pathname.endsWith("/")
+    ? parsed.pathname
+    : `${parsed.pathname.replace(/\/+$/, "")}/`;
+
+  return `${normalizedPath}${parsed.search}${parsed.hash}`;
+};
+
+export const resolveLeadPreviewSource = (
+  lead: PreviewSource | undefined,
+  options: { forClient?: boolean } = {},
+) => {
+  const { forClient = false } = options;
+
+  if (forClient && lead?.requiresLogin) {
+    const portal = normalizePreviewPortal(lead?.publicUrl ?? "");
+    if (portal) {
+      return {
+        url: portal,
+        source: "publicUrl" as const,
+        valid: true,
+        message: null,
+      };
+    }
+
+    if (lead.slug) {
+      return {
+        url: `/preview/${encodeURIComponent(lead.slug)}/`,
+        source: "publicUrl" as const,
+        valid: true,
+        message: null,
+      };
+    }
+  }
+
   const site = normalizePreviewSource(lead?.siteUrl ?? "");
   if (site) {
     return {

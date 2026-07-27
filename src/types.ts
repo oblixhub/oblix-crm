@@ -71,6 +71,7 @@ export interface PreviewState {
   status: "none" | "processing" | "ready" | "viewed" | "approved";
   version?: number;
   fileName?: string;
+  requiresLogin: boolean;
   publicUrl?: string;
   siteUrl?: string;
   sourcePath?: string;
