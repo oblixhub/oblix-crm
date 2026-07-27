@@ -197,7 +197,7 @@ Deno.serve(async (request) => {
     }
 
     const siteUrl = `${Deno.env.get("SUPABASE_URL")}/storage/v1/object/public/preview-sites/${sitePrefix}/index.html`;
-    const previewUrl = `https://oblix-crm.vercel.app/preview/${previewSlug}`;
+    const previewUrl = `https://sites.oblixhub.com/preview/${previewSlug}`;
     const { error: updateError } = await admin
       .from("leads")
       .update({
