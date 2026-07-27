@@ -305,6 +305,23 @@ svg {
   margin-top: clamp(2rem, 3.5vw, 3.4rem);
 }
 
+.contact-email {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.86rem;
+  text-decoration: underline;
+  text-decoration-color: rgba(255, 255, 255, 0.28);
+  text-underline-offset: 0.45rem;
+  transition:
+    color 180ms ease,
+    text-decoration-color 180ms ease;
+}
+
+.contact-email:hover,
+.contact-email:focus-visible {
+  color: var(--accent);
+  text-decoration-color: currentColor;
+}
+
 .button {
   display: inline-flex;
   align-items: center;

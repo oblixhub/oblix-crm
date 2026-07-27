@@ -28,6 +28,9 @@ const navigation = [
   { label: "Dúvidas", href: "#duvidas" },
 ];
 
+const sitesWhatsappUrl =
+  "https://wa.me/5573999305062?text=Ol%C3%A1%21%20Vi%20o%20site%20da%20OBLIX%20e%20quero%20criar%20um%20site%20para%20meu%20neg%C3%B3cio.";
+
 const directions = [
   {
     number: "01",
@@ -277,7 +280,12 @@ function Hero() {
             para transformar visitas em conversas.
           </p>
           <div className="hero-actions">
-            <a className="button button--accent" href="#contato">
+            <a
+              className="button button--accent"
+              href={sitesWhatsappUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
               Quero meu site
               <ArrowIcon diagonal />
             </a>
@@ -424,10 +432,6 @@ function FaqSection() {
 }
 
 function FinalContact() {
-  const contactUrl =
-    import.meta.env.VITE_CONTACT_URL ??
-    "mailto:hugo.oblix@gmail.com?subject=Quero%20criar%20meu%20site%20com%20a%20OBLIX";
-
   return (
     <section className="final-contact" id="contato">
       <div className="final-symbol" aria-hidden="true">
@@ -445,9 +449,17 @@ function FinalContact() {
           clara, bonita e pronta para conversar com seus clientes.
         </p>
         <div className="final-actions">
-          <a className="button button--accent" href={contactUrl}>
+          <a
+            className="button button--accent"
+            href={sitesWhatsappUrl}
+            target="_blank"
+            rel="noreferrer"
+          >
             Quero conversar
             <ArrowIcon diagonal />
+          </a>
+          <a className="contact-email" href="mailto:hugo.oblix@gmail.com">
+            hugo.oblix@gmail.com
           </a>
         </div>
       </div>
