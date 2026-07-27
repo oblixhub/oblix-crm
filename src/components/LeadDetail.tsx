@@ -1,4 +1,5 @@
 import {
+  Trash2,
   BadgeCheck,
   CalendarClock,
   Check,
@@ -42,6 +43,8 @@ const activityIcons = {
 interface LeadDetailProps {
   lead: Lead;
   onBack: () => void;
+  onDeleteLead: (leadId: number) => Promise<void> | void;
+  deletingLead: boolean;
   onStageChange: (stage: Stage) => void;
   onOwnerChange: (owner: Owner) => void;
   onAddNote: (note: string) => void;
@@ -56,6 +59,8 @@ interface LeadDetailProps {
 export function LeadDetail({
   lead,
   onBack,
+  onDeleteLead,
+  deletingLead,
   onStageChange,
   onOwnerChange,
   onAddNote,
@@ -115,6 +120,14 @@ export function LeadDetail({
         </div>
         <div className="lead-header-actions">
           <ContactActions lead={lead} onOpenMessages={onOpenMessages} />
+          <button
+            className="button validation-discard"
+            onClick={() => void onDeleteLead(lead.id)}
+            disabled={deletingLead}
+          >
+            <Trash2 size={17} />
+            {deletingLead ? "Excluindo..." : "Excluir lead"}
+          </button>
         </div>
         <label className="field compact-field">
           <span>Etapa atual</span>

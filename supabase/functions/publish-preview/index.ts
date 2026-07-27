@@ -17,10 +17,13 @@ const corsHeaders = {
 };
 
 const MAX_ZIP_BYTES = 20 * 1024 * 1024;
-const PREVIEW_TOKEN_SECRET =
-  Deno.env.get("PREVIEW_TOKEN_SECRET") ??
-  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ??
-  "";
+const PREVIEW_TOKEN_SECRET = (() => {
+  const configured = Deno.env.get("PREVIEW_TOKEN_SECRET")?.trim();
+  if (configured) {
+    return configured;
+  }
+  return Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+})();
 const PREVIEW_TOKEN_TTL_SECONDS = Number.parseInt(
   Deno.env.get("PREVIEW_TOKEN_TTL_SECONDS") ?? "1209600",
   10,

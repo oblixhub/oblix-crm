@@ -15,6 +15,8 @@ interface LeadDirectoryProps {
   onSelectLead: (id: number) => void;
   onOpenMessages: (id: number) => void;
   onPriorityChange: (id: number, priority: Priority) => void;
+  onDelete?: (id: number) => void | Promise<void>;
+  deletingLeadId?: number | null;
 }
 
 export function LeadDirectory({
@@ -22,6 +24,8 @@ export function LeadDirectory({
   onSelectLead,
   onOpenMessages,
   onPriorityChange,
+  onDelete,
+  deletingLeadId,
 }: LeadDirectoryProps) {
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
@@ -150,6 +154,8 @@ export function LeadDirectory({
             onSelect={() => onSelectLead(lead.id)}
             onOpenMessages={() => onOpenMessages(lead.id)}
             onPriorityChange={(next) => onPriorityChange(lead.id, next)}
+            onDelete={onDelete}
+            deleteDisabled={deletingLeadId === lead.id}
           />
         ))}
         {results.length === 0 && (

@@ -380,6 +380,7 @@ export default function App() {
   const [modal, setModal] = useState<ModalState>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [publishingPreviewForId, setPublishingPreviewForId] = useState<number | null>(null);
+  const [deletingLeadId, setDeletingLeadId] = useState<number | null>(null);
   const [theme, setTheme] = useState<"light" | "dark">(() => {
     const saved = window.localStorage.getItem("oblix-theme");
     return saved === "light" ? "light" : "dark";
@@ -495,6 +496,102 @@ export default function App() {
     toastTimeoutRef.current = window.setTimeout(() => setToast(null), 3200);
   };
 
+  const resolvePreviewFolderFromUrl = (siteUrl?: string | null) => {
+    if (!siteUrl) return null;
+    try {
+      const parsed = new URL(siteUrl);
+      const marker = "/preview-content/";
+      const markerIndex = parsed.pathname.indexOf(marker);
+      if (markerIndex < 0) return null;
+
+      const pathTail = parsed.pathname
+        .slice(markerIndex + marker.length)
+        .split("/")
+        .filter(Boolean);
+      const [token, slug, version] = pathTail;
+      if (!token || !slug || !version) return null;
+      return `${token}/${slug}/${version}`;
+    } catch {
+      return null;
+    }
+  };
+
+  const collectStoragePaths = async (
+    bucket: string,
+    prefix: string,
+  ): Promise<string[]> => {
+    if (!supabase) return [];
+    const bucketApi = supabase.storage.from(bucket);
+    const collected: string[] = [];
+
+    const gather = async (folder: string) => {
+      const { data, error } = await bucketApi.list(folder, {
+        limit: 1000,
+        sortBy: { column: "name", order: "asc" },
+      });
+      if (error) {
+        throw error;
+      }
+      for (const item of data) {
+        const path = folder ? `${folder}/${item.name}` : item.name;
+        if (item.metadata) {
+          collected.push(path);
+        } else {
+          await gather(path);
+        }
+      }
+    };
+
+    await gather(prefix);
+    return collected;
+  };
+
+  const removeStorageArtifacts = async (lead: Lead) => {
+    if (!supabase) return;
+    const removalTasks: Promise<void>[] = [];
+    const errors: string[] = [];
+
+    if (lead.preview.sourcePath) {
+      const sourcePath = lead.preview.sourcePath;
+      removalTasks.push(
+        (async () => {
+          const { error } = await supabase.storage
+            .from("preview-zips")
+            .remove([sourcePath]);
+          if (error) throw error;
+        })(),
+      );
+    }
+
+    const siteFolder = resolvePreviewFolderFromUrl(lead.preview.siteUrl);
+    if (siteFolder) {
+      removalTasks.push(
+        (async () => {
+          const files = await collectStoragePaths("preview-sites", siteFolder);
+          if (files.length === 0) return;
+          const { error } = await supabase.storage
+            .from("preview-sites")
+            .remove(files);
+          if (error) throw error;
+        })(),
+      );
+    }
+
+    const results = await Promise.allSettled(removalTasks);
+    results.forEach((result) => {
+      if (result.status === "rejected") {
+        errors.push(
+          result.reason instanceof Error
+            ? result.reason.message
+            : "Falha ao remover arquivos do preview.",
+        );
+      }
+    });
+    if (errors.length > 0) {
+      console.warn(`Falha na limpeza do lead ${lead.handle}:`, errors);
+    }
+  };
+
   const signOut = async () => {
     if (!supabase || signingOut) return;
     setSigningOut(true);
@@ -530,6 +627,45 @@ export default function App() {
       }
       return next;
     });
+  };
+
+  const deleteLead = async (leadId: number) => {
+    const targetLead = leads.find((lead) => lead.id === leadId);
+    if (!targetLead) return;
+
+    const confirmRemoval = window.confirm(
+      `Remover permanentemente ${targetLead.handle}?`,
+    );
+    if (!confirmRemoval) return;
+    const confirmFinal = window.confirm(
+      "Essa exclusão é irreversível e não pode ser desfeita. Confirmar?",
+    );
+    if (!confirmFinal) return;
+
+    setDeletingLeadId(leadId);
+
+    try {
+      if (supabase && session && targetLead.remoteId) {
+        const { error } = await supabase
+          .from("leads")
+          .delete()
+          .eq("id", targetLead.remoteId);
+        if (error) {
+          showToast(`NÃ£o foi possÃ­vel remover lead: ${error.message}`);
+          return;
+        }
+      }
+
+      setLeads((current) => current.filter((lead) => lead.id !== leadId));
+      if (selectedLeadId === leadId) {
+        setSelectedLeadId(null);
+        setActiveNav("leads");
+      }
+      void removeStorageArtifacts(targetLead);
+      showToast(`${targetLead.handle} removido permanentemente.`);
+    } finally {
+      setDeletingLeadId(null);
+    }
   };
 
   const addActivity = (
@@ -1339,6 +1475,8 @@ export default function App() {
       <LeadDetail
         lead={selectedLead}
         onBack={() => setSelectedLeadId(null)}
+        onDeleteLead={deleteLead}
+        deletingLead={deletingLeadId === selectedLead.id}
         onStageChange={changeStage}
         onOwnerChange={(owner) => changeOwner(selectedLead.id, owner)}
         onAddNote={addNote}
@@ -1361,6 +1499,8 @@ export default function App() {
         onImport={() => setModal({ type: "import" })}
         onOpenMessages={openMessages}
         onPriorityChange={changePriority}
+        onDelete={deleteLead}
+        deletingLeadId={deletingLeadId}
         onBulkOwner={(ids, owner) => updateMany(ids, { owner })}
         onBulkStage={(ids, stage) => updateMany(ids, { stage })}
         onBulkSchedule={(ids, scheduleDay) =>
@@ -1399,6 +1539,8 @@ export default function App() {
         onSelectLead={selectLead}
         onOpenMessages={openMessages}
         onPriorityChange={changePriority}
+        onDelete={deleteLead}
+        deletingLeadId={deletingLeadId}
       />
     );
   } else if (activeNav === "previews") {

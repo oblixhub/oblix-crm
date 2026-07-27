@@ -5,10 +5,10 @@ const PREVIEW_BUCKET = process.env.PREVIEW_BUCKET || "preview-sites";
 const MAX_PATH_SEGMENTS = 60;
 const MAX_PATH_LENGTH = 3200;
 const isTokenEnforced = () => process.env.PREVIEW_REQUIRE_TOKEN !== "false";
-const getPreviewTokenSecret = () =>
-  process.env.PREVIEW_TOKEN_SECRET ||
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  "";
+const getPreviewTokenSecret = () => {
+  const previewTokenSecret = process.env.PREVIEW_TOKEN_SECRET?.trim();
+  return previewTokenSecret || process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+};
 const getSupabaseUrl = () => process.env.SUPABASE_URL || "";
 const getServiceRoleKey = () => process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 

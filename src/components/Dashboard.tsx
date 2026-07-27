@@ -46,6 +46,8 @@ interface DashboardProps {
   onImport: () => void;
   onOpenMessages: (leadId: number) => void;
   onPriorityChange: (leadId: number, priority: Priority) => void;
+  onDelete?: (id: number) => void | Promise<void>;
+  deletingLeadId?: number | null;
   onBulkOwner: (leadIds: number[], owner: Owner) => void;
   onBulkStage: (leadIds: number[], stage: Stage) => void;
   onBulkSchedule: (leadIds: number[], day: WeekDay) => void;
@@ -58,6 +60,8 @@ export function Dashboard({
   onImport,
   onOpenMessages,
   onPriorityChange,
+  onDelete,
+  deletingLeadId,
   onBulkOwner,
   onBulkStage,
   onBulkSchedule,
@@ -430,6 +434,8 @@ export function Dashboard({
               onSelect={() => onSelectLead(lead.id)}
               onOpenMessages={() => onOpenMessages(lead.id)}
               onPriorityChange={(next) => onPriorityChange(lead.id, next)}
+              onDelete={onDelete}
+              deleteDisabled={deletingLeadId === lead.id}
               onSelectionChange={(checked) =>
                 setSelectedIds((current) => {
                   const next = new Set(current);

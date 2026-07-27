@@ -3,6 +3,7 @@ import {
   CalendarClock,
   Check,
   ExternalLink,
+  Trash2,
   Flag,
   Layers3,
 } from "lucide-react";
@@ -22,6 +23,8 @@ interface LeadCardProps {
   onPriorityChange: (priority: Priority) => void;
   selected?: boolean;
   onSelectionChange?: (selected: boolean) => void;
+  onDelete?: (id: number) => void | Promise<void>;
+  deleteDisabled?: boolean;
 }
 
 const priorities: Priority[] = ["Urgente", "Alta", "Normal", "Baixa"];
@@ -64,6 +67,8 @@ export function LeadCard({
   onPriorityChange,
   selected = false,
   onSelectionChange,
+  onDelete,
+  deleteDisabled = false,
 }: LeadCardProps) {
   const initials = leadInitials(lead.handle);
 
@@ -145,15 +150,29 @@ export function LeadCard({
         </button>
 
         <footer className="lead-card-footer" aria-label={`Ações de ${lead.handle}`}>
-          <ContactActions
-            lead={lead}
-            compact
-            onOpenMessages={onOpenMessages}
-          />
+        <ContactActions
+          lead={lead}
+          compact
+          onOpenMessages={onOpenMessages}
+        />
+        {onDelete ? (
           <button
-            className="quick-contact quick-contact--open"
-            onClick={onSelect}
-            aria-label={`Abrir ficha de ${lead.handle}`}
+            className="quick-contact quick-contact--danger"
+            onClick={(event) => {
+              event.stopPropagation();
+              void onDelete(lead.id);
+            }}
+            disabled={deleteDisabled}
+            title="Excluir lead permanentemente"
+            aria-label={`Excluir ${lead.handle} permanentemente`}
+          >
+            <Trash2 size={14} />
+          </button>
+        ) : null}
+        <button
+          className="quick-contact quick-contact--open"
+          onClick={onSelect}
+          aria-label={`Abrir ficha de ${lead.handle}`}
             title="Abrir ficha completa"
           >
             <ExternalLink size={18} />

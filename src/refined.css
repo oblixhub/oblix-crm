@@ -981,6 +981,20 @@ textarea {
   background: var(--app-surface);
 }
 
+.quick-contact--danger {
+  border-color: color-mix(in srgb, var(--app-red) 48%, var(--app-border));
+  color: var(--app-red);
+}
+
+.quick-contact--danger:hover {
+  background: color-mix(in srgb, var(--app-red) 12%, transparent);
+}
+
+.quick-contact--danger[disabled] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .weekly-footer,
 .directory-footer {
   display: flex;
