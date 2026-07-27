@@ -43,8 +43,10 @@ interface LeadDetailProps {
   onStageChange: (stage: Stage) => void;
   onOwnerChange: (owner: Owner) => void;
   onAddNote: (note: string) => void;
-  onUpload: (file: File) => void;
+  onUpload: (file: File) => Promise<void>;
+  previewPublishing: boolean;
   onOpenClientPreview: () => void;
+  onCopyPreviewLink: () => void;
   onMarkPaid: () => void;
   onOpenMessages: () => void;
 }
@@ -56,7 +58,9 @@ export function LeadDetail({
   onOwnerChange,
   onAddNote,
   onUpload,
+  previewPublishing,
   onOpenClientPreview,
+  onCopyPreviewLink,
   onMarkPaid,
   onOpenMessages,
 }: LeadDetailProps) {
@@ -208,15 +212,19 @@ export function LeadDetail({
               <input
                 type="file"
                 accept=".zip,application/zip"
+                disabled={previewPublishing}
                 onChange={(event) => {
                   const file = event.target.files?.[0];
-                  if (file) onUpload(file);
+                  if (file) {
+                    void onUpload(file);
+                    event.target.value = "";
+                  }
                 }}
               />
               <CloudUpload size={31} strokeWidth={1.6} />
-              <strong>Enviar ZIP do site</strong>
-              <span>Arraste e solte o arquivo aqui</span>
-              <small>ou clique para selecionar</small>
+              <strong>{previewPublishing ? "Publicando preview..." : "Publicar ZIP para validação"}</strong>
+              <span>O CRM valida, publica e cria o link do cliente.</span>
+              <small>ZIP de até 20 MB</small>
             </label>
 
             <div className="version-block">
@@ -267,13 +275,15 @@ export function LeadDetail({
             </ul>
 
             {lead.preview.status !== "none" && (
-              <button
-                className="button button--secondary button--full"
-                onClick={onOpenClientPreview}
-              >
-                <ExternalLink size={17} />
-                Simular acesso do cliente
-              </button>
+              <div className="preview-link-actions">
+                <button className="button button--secondary" onClick={onOpenClientPreview}>
+                  <ExternalLink size={17} />
+                  Abrir link do cliente
+                </button>
+                <button className="button button--quiet" onClick={onCopyPreviewLink}>
+                  Copiar link
+                </button>
+              </div>
             )}
           </section>
 

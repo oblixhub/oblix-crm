@@ -61,6 +61,9 @@ export interface PreviewState {
   version?: number;
   fileName?: string;
   publicUrl?: string;
+  siteUrl?: string;
+  sourcePath?: string;
+  slug?: string;
   publicSlug: string;
   checklist: {
     index: boolean;

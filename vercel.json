@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/preview/(.*)",
+      "destination": "/index.html"
+    },
+    {
       "source": "/leticia-preview-20260727",
       "destination": "/previews/leticia-preview-20260727/index.html"
     },

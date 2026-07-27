@@ -203,6 +203,9 @@ type DbLead = {
   preview_file_name?: string | null;
   preview_version?: number | null;
   preview_published_at?: string | null;
+  preview_slug?: string | null;
+  preview_site_url?: string | null;
+  preview_source_path?: string | null;
   lead_batches?: {
     id: string;
     name: string;
@@ -252,6 +255,9 @@ const mapDbLead = (row: DbLead, index: number): Lead => ({
     version: row.preview_version ?? undefined,
     fileName: row.preview_file_name ?? undefined,
     publicUrl: row.preview_url ?? undefined,
+    siteUrl: row.preview_site_url ?? undefined,
+    sourcePath: row.preview_source_path ?? undefined,
+    slug: row.preview_slug ?? undefined,
     publicSlug: row.handle.replace(/^@/, ""),
     checklist: {
       index: Boolean(row.preview_url),
@@ -276,6 +282,9 @@ const toDbPatch = (lead: Lead) => ({
   preview_url: lead.preview.publicUrl ?? null,
   preview_file_name: lead.preview.fileName ?? null,
   preview_version: lead.preview.version ?? null,
+  preview_slug: lead.preview.slug ?? null,
+  preview_site_url: lead.preview.siteUrl ?? null,
+  preview_source_path: lead.preview.sourcePath ?? null,
   updated_at: new Date().toISOString(),
 });
 
@@ -309,6 +318,7 @@ export default function App() {
   const [selectedLeadId, setSelectedLeadId] = useState<number | null>(null);
   const [modal, setModal] = useState<ModalState>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [publishingPreviewForId, setPublishingPreviewForId] = useState<number | null>(null);
   const [theme, setTheme] = useState<"light" | "dark">(() => {
     const saved = window.localStorage.getItem("oblix-theme");
     return saved === "light" ? "light" : "dark";
@@ -943,8 +953,85 @@ export default function App() {
     );
   };
 
-  const uploadPreview = (file: File) => {
-    if (!selectedLead) return;
+  const uploadPreview = async (file: File) => {
+    if (!selectedLead || !supabase || !session || !selectedLead.remoteId) {
+      showToast("Entre no CRM conectado ao Supabase para publicar o preview.");
+      return;
+    }
+    if (!/\.zip$/i.test(file.name) || file.size === 0) {
+      showToast("Selecione um arquivo ZIP válido.");
+      return;
+    }
+    if (file.size > 20 * 1024 * 1024) {
+      showToast("O ZIP pode ter no máximo 20 MB.");
+      return;
+    }
+
+    const leadId = selectedLead.id;
+    const remoteId = selectedLead.remoteId;
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]+/g, "-");
+    const sourcePath = `${remoteId}/source/${Date.now()}-${safeName}`;
+    setPublishingPreviewForId(leadId);
+    try {
+      const { error: uploadError } = await supabase.storage
+        .from("preview-zips")
+        .upload(sourcePath, file, { contentType: "application/zip", upsert: false });
+      if (uploadError) throw uploadError;
+
+      const { data, error } = await supabase.functions.invoke<{
+        success?: boolean;
+        previewUrl?: string;
+        siteUrl?: string;
+        version?: number;
+        hasIndex?: boolean;
+        relativePaths?: boolean;
+      }>("publish-preview", { body: { leadId: remoteId, sourcePath } });
+      if (error || !data?.success || !data.previewUrl || !data.siteUrl) {
+        throw error ?? new Error("Não foi possível publicar o preview.");
+      }
+      const previewUrl = data.previewUrl;
+      const siteUrl = data.siteUrl;
+
+      updateLead(leadId, (lead) =>
+        addActivity(
+          {
+            ...lead,
+            stage: "Preview",
+            nextAction: "Enviar acesso ao cliente",
+            preview: {
+              ...lead.preview,
+              status: "ready",
+              version: data.version ?? (lead.preview.version ?? 0) + 1,
+              fileName: file.name,
+              publicUrl: previewUrl,
+              siteUrl,
+              sourcePath,
+              slug: previewUrl.split("/").pop(),
+              checklist: {
+                index: Boolean(data.hasIndex),
+                relativePaths: Boolean(data.relativePaths),
+                protectedAccess: true,
+              },
+            },
+          },
+          {
+            kind: "preview",
+            title: "Preview publicado automaticamente",
+            detail: `${file.name} foi validado e a versão ${data.version ?? 1} está pronta para o cliente.`,
+            author: "Você",
+          },
+        ),
+      );
+      showToast("Preview publicado. O link do cliente está pronto para enviar.");
+    } catch (uploadError) {
+      const message = uploadError instanceof Error ? uploadError.message : "Não foi possível publicar este ZIP.";
+      showToast(message);
+    } finally {
+      setPublishingPreviewForId(null);
+    }
+    return;
+
+    /* Local-only preview simulation kept for historical context.
     updateLead(selectedLead.id, (lead) =>
       addActivity(
         {
@@ -974,6 +1061,8 @@ export default function App() {
     showToast("ZIP adicionado e checklist concluído na demonstração.");
   };
 
+    */
+  };
   const approvePreview = (leadId: number) => {
     updateLead(leadId, (lead) =>
       addActivity(
@@ -1039,7 +1128,20 @@ export default function App() {
 
   const openClientPreview = (leadId?: number) => {
     const id = leadId ?? selectedLead?.id;
+    const lead = leads.find((item) => item.id === id);
+    if (lead?.preview.publicUrl) {
+      window.open(lead.preview.publicUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
     if (id) setModal({ type: "client-preview", leadId: id });
+  };
+
+  const copyPreviewLink = () => {
+    if (!selectedLead?.preview.publicUrl) return;
+    void navigator.clipboard
+      .writeText(selectedLead.preview.publicUrl)
+      .then(() => showToast("Link do cliente copiado."))
+      .catch(() => showToast("Não foi possível copiar automaticamente. Abra o link para copiar."));
   };
 
   const openMessages = (leadId?: number) => {
@@ -1127,7 +1229,9 @@ export default function App() {
         onOwnerChange={(owner) => changeOwner(selectedLead.id, owner)}
         onAddNote={addNote}
         onUpload={uploadPreview}
+        previewPublishing={publishingPreviewForId === selectedLead.id}
         onOpenClientPreview={() => openClientPreview()}
+        onCopyPreviewLink={copyPreviewLink}
         onMarkPaid={markPaid}
         onOpenMessages={() => openMessages()}
       />
