@@ -20,6 +20,7 @@ import { useMemo, useState } from "react";
 import {
   ownerLabels,
   owners,
+  leadSourceLabels,
   stages,
   type Activity,
   type Lead,
@@ -101,6 +102,15 @@ export function LeadDetail({
               <Layers3 size={13} />
               {lead.batchName}
             </span>
+            <span className="source-chip">
+              {leadSourceLabels[lead.sourceType]}
+            </span>
+            {lead.capturedAt && (
+              <span>
+                Capturado em {new Date(lead.capturedAt).toLocaleString("pt-BR")}
+                {lead.capturedBy ? ` por ${lead.capturedBy}` : ""}
+              </span>
+            )}
           </p>
         </div>
         <div className="lead-header-actions">

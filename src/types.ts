@@ -16,7 +16,17 @@ export const ownerLabels: Record<Owner, string> = {
 };
 export type Priority = "Urgente" | "Alta" | "Normal" | "Baixa";
 export type ValidationStatus = "pending" | "valid" | "discarded";
-export type LeadSource = "excel" | "manual" | "instagram";
+export type LeadSource =
+  | "excel"
+  | "manual"
+  | "instagram"
+  | "chrome_extension";
+export const leadSourceLabels: Record<LeadSource, string> = {
+  excel: "Excel",
+  manual: "Manual",
+  instagram: "Instagram",
+  chrome_extension: "Extensão",
+};
 export type WeekDay = "Hoje" | "Seg" | "Ter" | "Qua" | "Qui" | "Sex";
 export type SiteStatus = "Sem site" | "Tem site" | "Não verificado";
 export type ProspectingOutcome =
@@ -97,6 +107,10 @@ export interface Lead {
   siteStatus: SiteStatus;
   instagramUrl: string;
   whatsappUrl?: string;
+  whatsappNumber?: string;
+  capturedAt?: string;
+  capturedBy?: string;
+  notes?: string;
   offer: "Com domínio" | "Sem domínio";
   amount: number;
   paymentStatus: "Não aprovado" | "Aguardando PIX" | "Pago";

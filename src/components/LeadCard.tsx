@@ -6,7 +6,12 @@ import {
   Flag,
   Layers3,
 } from "lucide-react";
-import { ownerLabels, type Lead, type Priority } from "../types";
+import {
+  leadSourceLabels,
+  ownerLabels,
+  type Lead,
+  type Priority,
+} from "../types";
 import { ContactActions } from "./ContactActions";
 import { StageBadge } from "./StageBadge";
 
@@ -101,6 +106,9 @@ export function LeadCard({
           <span className="batch-chip" title={`Origem: ${lead.batchName}`}>
             <Layers3 size={13} />
             {lead.batchName}
+          </span>
+          <span className="source-chip">
+            {leadSourceLabels[lead.sourceType]}
           </span>
           <label
             className={`priority-control priority-${lead.priority.toLowerCase()}`}

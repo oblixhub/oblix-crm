@@ -1,7 +1,13 @@
 import { Search, SlidersHorizontal } from "lucide-react";
 import { useDeferredValue, useMemo, useState } from "react";
 import { ALL_BATCHES, getBatchNames, matchesBatch } from "../lib/leads";
-import type { Lead, Priority, Stage } from "../types";
+import {
+  leadSourceLabels,
+  type Lead,
+  type LeadSource,
+  type Priority,
+  type Stage,
+} from "../types";
 import { LeadCard } from "./LeadCard";
 
 interface LeadDirectoryProps {
@@ -21,6 +27,7 @@ export function LeadDirectory({
   const deferredQuery = useDeferredValue(query);
   const [stage, setStage] = useState<Stage | "Todas">("Todas");
   const [priority, setPriority] = useState<Priority | "Todas">("Todas");
+  const [source, setSource] = useState<LeadSource | "Todas">("Todas");
   const [batch, setBatch] = useState<string>(ALL_BATCHES);
   const [visibleCount, setVisibleCount] = useState(48);
   const batches = useMemo(() => getBatchNames(leads), [leads]);
@@ -36,6 +43,7 @@ export function LeadDirectory({
             lead.nextAction.toLowerCase().includes(normalized)) &&
           (stage === "Todas" || lead.stage === stage) &&
           (priority === "Todas" || lead.priority === priority) &&
+          (source === "Todas" || lead.sourceType === source) &&
           matchesBatch(lead, batch),
       )
       .sort(
@@ -43,7 +51,7 @@ export function LeadDirectory({
           Number(Boolean(b.overdue)) - Number(Boolean(a.overdue)) ||
           a.handle.localeCompare(b.handle),
       );
-  }, [batch, deferredQuery, leads, priority, stage]);
+  }, [batch, deferredQuery, leads, priority, source, stage]);
 
   return (
     <div className="standard-page refined-standard-page">
@@ -85,6 +93,21 @@ export function LeadDirectory({
           <option>{ALL_BATCHES}</option>
           {batches.map((batchName) => (
             <option key={batchName}>{batchName}</option>
+          ))}
+        </select>
+        <select
+          aria-label="Filtrar por origem"
+          value={source}
+          onChange={(event) => {
+            setSource(event.target.value as LeadSource | "Todas");
+            setVisibleCount(48);
+          }}
+        >
+          <option value="Todas">Todas as origens</option>
+          {Object.entries(leadSourceLabels).map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
           ))}
         </select>
         <select

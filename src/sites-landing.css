@@ -213,7 +213,7 @@ svg {
   color: var(--black);
 }
 
-.mobile-menu {
+.marketing-page .mobile-menu {
   display: none;
 }
 
@@ -1285,9 +1285,9 @@ svg {
     gap: 0.8rem;
   }
 
-  .mobile-menu {
+  .marketing-page .mobile-menu {
     position: relative;
-    display: block;
+    display: block !important;
     width: 48px;
     flex: 0 0 48px;
   }
@@ -1432,9 +1432,9 @@ svg {
   .hero-copy {
     position: relative;
     min-height: calc(84svh - 5rem);
-    padding: 0 0 1rem;
+    padding: clamp(1rem, 4vw, 1.5rem) 0 1.5rem;
     justify-content: flex-start;
-    transform: translateY(-3rem);
+    transform: none;
   }
 
   .hero h1 {
@@ -1812,7 +1812,7 @@ svg {
   }
 
   .hero-copy {
-    padding-top: 3.8rem;
+    padding-top: 1rem;
   }
 
   .hero-copy > p {
