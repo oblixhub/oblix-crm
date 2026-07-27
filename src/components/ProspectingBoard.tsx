@@ -9,6 +9,7 @@ import {
   Flag,
   Globe2,
   Instagram,
+  Layers3,
   MessageCircleMore,
   Play,
   Search,
@@ -16,6 +17,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { ALL_BATCHES, getBatchNames, matchesBatch } from "../lib/leads";
 import { ownerLabels, owners } from "../types";
 import type {
   Lead,
@@ -93,6 +95,28 @@ const priorityWeight: Record<Priority, number> = {
   Baixa: 3,
 };
 
+const PROSPECTING_WORKSPACE_STORAGE_KEY = "oblix-crm-prospecting-workspace-v1";
+
+type ProspectingWorkspace = {
+  ownerView?: Owner | "Todos";
+  batch?: string;
+  priority?: Priority | "Todas";
+  selectedHandle?: string | null;
+};
+
+const loadProspectingWorkspace = (): ProspectingWorkspace => {
+  try {
+    const saved = window.sessionStorage.getItem(
+      PROSPECTING_WORKSPACE_STORAGE_KEY,
+    );
+    if (!saved) return {};
+    const parsed = JSON.parse(saved) as ProspectingWorkspace;
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
 interface ProspectingBoardProps {
   leads: Lead[];
   onSelectLead: (id: number) => void;
@@ -117,16 +141,60 @@ export function ProspectingBoard({
   onOwnerChange,
   onSaveOutcome,
 }: ProspectingBoardProps) {
-  const [ownerView, setOwnerView] = useState<Owner | "Equipe">("Você");
+  const [restoredWorkspace] = useState(loadProspectingWorkspace);
+  const [ownerView, setOwnerView] = useState<Owner | "Todos">(
+    () => restoredWorkspace.ownerView ?? "Todos",
+  );
   const [query, setQuery] = useState("");
-  const [priority, setPriority] = useState<Priority | "Todas">("Todas");
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [priority, setPriority] = useState<Priority | "Todas">(
+    () => restoredWorkspace.priority ?? "Todas",
+  );
+  const [batch, setBatch] = useState(
+    () => restoredWorkspace.batch ?? ALL_BATCHES,
+  );
+  const [selectedHandle, setSelectedHandle] = useState<string | null>(
+    () => restoredWorkspace.selectedHandle ?? null,
+  );
   const [selectedOutcome, setSelectedOutcome] =
     useState<ProspectingOutcome>("Mensagem enviada");
   const [nextAction, setNextAction] = useState("Enviar mensagem de follow-up");
   const [scheduleDay, setScheduleDay] = useState<WeekDay>("Ter");
   const [time, setTime] = useState("10:00");
   const [note, setNote] = useState("");
+  const batches = useMemo(() => getBatchNames(leads), [leads]);
+  const dailyTarget = 20;
+  const completedToday = useMemo(
+    () =>
+      leads.filter((lead) =>
+        lead.activities.some(
+          (activity) =>
+            activity.time.startsWith("Hoje") &&
+            outcomes.some((outcome) => outcome.value === activity.title),
+        ),
+      ).length,
+    [leads],
+  );
+  const dailyProgress = Math.min(
+    100,
+    Math.round((completedToday / dailyTarget) * 100),
+  );
+
+  useEffect(() => {
+    try {
+      window.sessionStorage.setItem(
+        PROSPECTING_WORKSPACE_STORAGE_KEY,
+        JSON.stringify({ ownerView, batch, priority, selectedHandle }),
+      );
+    } catch {
+      // The board remains usable if browser storage is unavailable.
+    }
+  }, [batch, ownerView, priority, selectedHandle]);
+
+  useEffect(() => {
+    if (batch !== ALL_BATCHES && !batches.includes(batch)) {
+      setBatch(ALL_BATCHES);
+    }
+  }, [batch, batches]);
 
   const queue = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -136,7 +204,8 @@ export function ProspectingBoard({
           ["Contatar", "Interessado", "Materiais"].includes(
             lead.stage,
           ) &&
-          (ownerView === "Equipe" || lead.owner === ownerView) &&
+          (ownerView === "Todos" || lead.owner === ownerView) &&
+          matchesBatch(lead, batch) &&
           (priority === "Todas" || lead.priority === priority) &&
           (!normalized ||
             lead.handle.toLowerCase().includes(normalized) ||
@@ -148,14 +217,16 @@ export function ProspectingBoard({
           priorityWeight[a.priority] - priorityWeight[b.priority] ||
           a.dueTime.localeCompare(b.dueTime),
       );
-  }, [leads, ownerView, priority, query]);
+  }, [batch, leads, ownerView, priority, query]);
 
-  const activeId =
-    selectedId && queue.some((lead) => lead.id === selectedId)
-      ? selectedId
-      : queue[0]?.id;
-  const selectedLead = queue.find((lead) => lead.id === activeId);
-  const selectedIndex = queue.findIndex((lead) => lead.id === activeId);
+  const activeHandle =
+    selectedHandle && queue.some((lead) => lead.handle === selectedHandle)
+      ? selectedHandle
+      : queue[0]?.handle;
+  const selectedLead = queue.find((lead) => lead.handle === activeHandle);
+  const selectedIndex = queue.findIndex(
+    (lead) => lead.handle === activeHandle,
+  );
 
   const moveSelection = useCallback(
     (direction: -1 | 1) => {
@@ -167,7 +238,7 @@ export function ProspectingBoard({
               queue.length - 1,
               Math.max(0, selectedIndex + direction),
             );
-      setSelectedId(queue[nextIndex].id);
+      setSelectedHandle(queue[nextIndex].handle);
     },
     [queue, selectedIndex],
   );
@@ -194,7 +265,7 @@ export function ProspectingBoard({
       note,
     );
     const nextLead = queue[selectedIndex + 1] ?? queue[0];
-    setSelectedId(nextLead?.id ?? null);
+    setSelectedHandle(nextLead?.handle ?? null);
     setNote("");
     setSelectedOutcome("Mensagem enviada");
     setNextAction("Enviar mensagem de follow-up");
@@ -211,27 +282,27 @@ export function ProspectingBoard({
         </div>
         <div className="daily-progress">
           <span>
-            <strong>14</strong> de 20 contatos hoje
+            <strong>{completedToday}</strong> de {dailyTarget} contatos hoje
           </span>
           <i>
-            <span />
+            <span style={{ width: `${dailyProgress}%` }} />
           </i>
-          <small>70%</small>
+          <small>{dailyProgress}%</small>
         </div>
         <div className="owner-switch" aria-label="Visualização da fila">
-          {[...owners, "Equipe" as const].map((item) => (
+          {(["Todos", ...owners] as const).map((item) => (
             <button
               key={item}
               className={ownerView === item ? "active" : ""}
               onClick={() => setOwnerView(item)}
             >
-              {item === "Equipe" ? "Equipe" : ownerLabels[item]}
+              {item === "Todos" ? "Todos" : ownerLabels[item]}
             </button>
           ))}
         </div>
         <button
           className="button button--primary start-next"
-          onClick={() => setSelectedId(queue[0]?.id ?? null)}
+          onClick={() => setSelectedHandle(queue[0]?.handle ?? null)}
         >
           <Play size={17} fill="currentColor" />
           Iniciar próximo lead
@@ -240,9 +311,16 @@ export function ProspectingBoard({
 
       <div className="prospecting-filters">
         <label>
-          <CalendarClock size={17} />
-          <select aria-label="Semana">
-            <option>20–24 jul</option>
+          <Layers3 size={17} />
+          <select
+            aria-label="Filtrar lote"
+            value={batch}
+            onChange={(event) => setBatch(event.target.value)}
+          >
+            <option>{ALL_BATCHES}</option>
+            {batches.map((batchName) => (
+              <option key={batchName}>{batchName}</option>
+            ))}
           </select>
           <ChevronDown size={15} />
         </label>
@@ -280,13 +358,13 @@ export function ProspectingBoard({
             <span>{queue.length} leads</span>
           </header>
           <div className="prospecting-queue-list">
-            {queue.slice(0, 24).map((lead) => (
+            {queue.map((lead) => (
               <button
                 key={lead.id}
-                className={`${lead.id === activeId ? "active" : ""} ${
+                className={`${lead.handle === activeHandle ? "active" : ""} ${
                   lead.overdue ? "overdue" : ""
                 }`}
-                onClick={() => setSelectedId(lead.id)}
+                onClick={() => setSelectedHandle(lead.handle)}
               >
                 <Flag
                   className={`queue-priority priority-${lead.priority.toLowerCase()}`}
@@ -296,7 +374,9 @@ export function ProspectingBoard({
                 <time>{lead.dueTime}</time>
                 <span>
                   <strong>{lead.handle}</strong>
-                  <small>{lead.stage}</small>
+                  <small>
+                    {lead.stage} · {lead.batchName}
+                  </small>
                 </span>
                 {lead.overdue ? (
                   <em>Atrasado</em>
@@ -374,6 +454,13 @@ export function ProspectingBoard({
               <label>
                 <span>Etapa</span>
                 <strong>{selectedLead.stage}</strong>
+              </label>
+              <label>
+                <span>Lote</span>
+                <strong className="context-batch">
+                  <Layers3 size={14} />
+                  {selectedLead.batchName}
+                </strong>
               </label>
             </div>
 

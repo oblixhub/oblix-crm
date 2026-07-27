@@ -25,11 +25,22 @@
   --app-border: #d8d8d3;
   --app-border-strong: #b9b9b3;
   --app-green: #c8ff3d;
-  --app-green-strong: #b5ee27;
-  --app-green-soft: #f1ffd0;
+  --app-green-strong: #466400;
+  --app-green-ink: #263900;
+  --app-green-soft: #f3ffda;
   --app-sidebar: #050505;
   --app-sidebar-active: #141414;
   --app-shadow: 0 18px 48px rgba(0, 0, 0, 0.08);
+  /* Keep legacy components on the same accessible brand tokens. */
+  --bg: var(--app-bg);
+  --surface: var(--app-surface);
+  --text: var(--app-text);
+  --muted: var(--app-muted);
+  --line: var(--app-border);
+  --line-strong: var(--app-border-strong);
+  --green: var(--app-green-strong);
+  --green-dark: var(--app-green-ink);
+  --green-soft: var(--app-green-soft);
 }
 
 :root[data-theme="dark"] {
@@ -43,6 +54,7 @@
   --app-border-strong: #3b3b3b;
   --app-green: #c8ff3d;
   --app-green-strong: #dcff81;
+  --app-green-ink: #050505;
   --app-green-soft: #161c08;
   --app-sidebar: #000000;
   --app-sidebar-active: #121212;

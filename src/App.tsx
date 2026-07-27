@@ -248,8 +248,27 @@ type DbLead = {
   } | null;
 };
 
+type UserProfile = {
+  display_name: string;
+  role: "owner" | "seller";
+};
+
+const stableLeadId = (remoteId: string) => {
+  const uuidPrefix = remoteId.replaceAll("-", "").slice(0, 13);
+  if (/^[\da-f]{13}$/i.test(uuidPrefix)) {
+    return Number.parseInt(uuidPrefix, 16);
+  }
+
+  let hash = 2166136261;
+  for (let index = 0; index < remoteId.length; index += 1) {
+    hash ^= remoteId.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+};
+
 const mapDbLead = (row: DbLead, index: number): Lead => ({
-  id: index + 1,
+  id: row.id ? stableLeadId(row.id) : index + 1,
   remoteId: row.id,
   fullName: row.full_name ?? undefined,
   handle: row.handle,
@@ -262,7 +281,8 @@ const mapDbLead = (row: DbLead, index: number): Lead => ({
     row.lead_batches?.name ??
     (row.source_type === "manual" ? "Cadastro manual" : "Lote 1"),
   sourceType: row.source_type ?? "excel",
-  owner: row.owner === "Sócia" ? "Sócia" : "Você",
+  owner:
+    row.owner === "Sócia" || row.owner === "Equipe" ? row.owner : "Você",
   stage: (row.validation_status === "pending" ? "Validar" : row.stage) as Stage,
   nextAction:
     row.next_action ??
@@ -344,6 +364,8 @@ export default function App() {
   const [leads, setLeads] = useState<Lead[]>(() => initialLeads);
   const [authReady, setAuthReady] = useState(!supabaseConfigured);
   const [session, setSession] = useState<Awaited<ReturnType<NonNullable<typeof supabase>["auth"]["getSession"]>>["data"]["session"]>(null);
+  const [currentProfile, setCurrentProfile] = useState<UserProfile | null>(null);
+  const [signingOut, setSigningOut] = useState(false);
   const [backendLoading, setBackendLoading] = useState(Boolean(supabaseConfigured));
   const [templates, setTemplates] = useState<MessageTemplate[]>(
     loadMessageTemplates,
@@ -388,12 +410,19 @@ export default function App() {
     if (!supabase || !session) return;
     let active = true;
     setBackendLoading(true);
-    void supabase
+    const leadsRequest = supabase
       .from("leads")
       .select("*, lead_batches(id, name, week_start, status)")
       .order("priority_marked", { ascending: false })
-      .order("created_at", { ascending: true })
-      .then(({ data, error }) => {
+      .order("created_at", { ascending: true });
+    const profileRequest = supabase
+      .from("profiles")
+      .select("display_name, role")
+      .eq("user_id", session.user.id)
+      .maybeSingle();
+
+    void Promise.all([leadsRequest, profileRequest]).then(
+      ([{ data, error }, { data: profileData }]) => {
         if (!active) return;
         if (!error && data) {
           const mapped = data.map((row, index) =>
@@ -407,9 +436,11 @@ export default function App() {
             setActiveNav("validation");
           }
         }
+        setCurrentProfile((profileData as UserProfile | null) ?? null);
         setBackendLoading(false);
         if (error) showToast(`Não foi possível carregar os leads: ${error.message}`);
-      });
+      },
+    );
     return () => {
       active = false;
     };
@@ -462,6 +493,26 @@ export default function App() {
     }
     setToast(message);
     toastTimeoutRef.current = window.setTimeout(() => setToast(null), 3200);
+  };
+
+  const signOut = async () => {
+    if (!supabase || signingOut) return;
+    setSigningOut(true);
+    const { error } = await supabase.auth.signOut({ scope: "local" });
+    if (error) {
+      setSigningOut(false);
+      showToast(`Não foi possível sair: ${error.message}`);
+      return;
+    }
+    window.sessionStorage.removeItem(CRM_WORKSPACE_STORAGE_KEY);
+    window.sessionStorage.removeItem("oblix-crm-validation-workspace-v2");
+    window.sessionStorage.removeItem("oblix-crm-prospecting-workspace-v1");
+    setCurrentProfile(null);
+    setSelectedLeadId(null);
+    setModal(null);
+    setSession(null);
+    setBackendLoading(false);
+    setSigningOut(false);
   };
 
   const updateLead = (leadId: number, updater: (lead: Lead) => Lead) => {
@@ -737,10 +788,7 @@ export default function App() {
       return;
     }
 
-    setLeads((current) => [
-      { ...mapDbLead(data as DbLead, current.length), id: Date.now() },
-      ...current,
-    ]);
+    setLeads((current) => [mapDbLead(data as DbLead, current.length), ...current]);
     setModal(null);
     setActiveNav("validation");
     showToast(`${lead.handle} adicionado à validação manual.`);
@@ -915,10 +963,7 @@ export default function App() {
     }
 
     setLeads((current) => [
-      ...data.map((row, index) => ({
-        ...mapDbLead(row as DbLead, index),
-        id: Date.now() + index,
-      })),
+      ...data.map((row, index) => mapDbLead(row as DbLead, index)),
       ...current,
     ]);
     setModal(null);
@@ -1375,10 +1420,19 @@ export default function App() {
       <AppShell
         active={activeNav}
         theme={theme}
+        profileName={
+          currentProfile?.display_name ??
+          session?.user.email?.split("@")[0] ??
+          "Você"
+        }
+        profileEmail={session?.user.email ?? ""}
+        profileRole={currentProfile?.role === "seller" ? "Vendedor" : "Sócio / dono"}
+        signingOut={signingOut}
         onNavigate={navigate}
         onToggleTheme={() =>
           setTheme((current) => (current === "light" ? "dark" : "light"))
         }
+        onSignOut={() => void signOut()}
       >
         {content}
       </AppShell>

@@ -10,6 +10,7 @@ import {
   ExternalLink,
   FileArchive,
   Heart,
+  Layers3,
   MessageCircle,
   Pencil,
   Send,
@@ -94,7 +95,13 @@ export function LeadDetail({
         <div className="lead-title">
           <span className="breadcrumb">Leads / {lead.handle}</span>
           <h1>{lead.handle}</h1>
-          <p>{lead.category} · Instagram</p>
+          <p className="lead-title-meta">
+            <span>{lead.category} · Instagram</span>
+            <span className="batch-chip">
+              <Layers3 size={13} />
+              {lead.batchName}
+            </span>
+          </p>
         </div>
         <div className="lead-header-actions">
           <ContactActions lead={lead} onOpenMessages={onOpenMessages} />

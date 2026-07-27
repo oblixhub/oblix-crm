@@ -1,11 +1,16 @@
-import { CheckCircle2, Clock3 } from "lucide-react";
+import { CheckCircle2, Clock3, Layers3 } from "lucide-react";
+import { useMemo, useState } from "react";
+import { ALL_BATCHES, getBatchNames, matchesBatch } from "../lib/leads";
 import type { Lead } from "../types";
 
 export function FinanceView({ leads }: { leads: Lead[] }) {
+  const [batch, setBatch] = useState<string>(ALL_BATCHES);
+  const batches = useMemo(() => getBatchNames(leads), [leads]);
   const commercialLeads = leads.filter(
     (lead) =>
-      lead.paymentStatus === "Aguardando PIX" ||
-      lead.paymentStatus === "Pago",
+      (lead.paymentStatus === "Aguardando PIX" ||
+        lead.paymentStatus === "Pago") &&
+      matchesBatch(lead, batch),
   );
   const paid = commercialLeads
     .filter((lead) => lead.paymentStatus === "Pago")
@@ -33,12 +38,25 @@ export function FinanceView({ leads }: { leads: Lead[] }) {
           <strong>R$ {paid}</strong>
         </div>
       </div>
+      <div className="list-filterbar">
+        <Layers3 size={18} />
+        <label>
+          <span>Filtrar por lote</span>
+          <select value={batch} onChange={(event) => setBatch(event.target.value)}>
+            <option>{ALL_BATCHES}</option>
+            {batches.map((batchName) => (
+              <option key={batchName}>{batchName}</option>
+            ))}
+          </select>
+        </label>
+      </div>
       <section className="panel directory-panel">
         <div className="table-scroll">
           <table className="lead-table">
             <thead>
               <tr>
                 <th>Cliente</th>
+                <th>Lote</th>
                 <th>Oferta</th>
                 <th>Valor</th>
                 <th>Status</th>
@@ -50,6 +68,12 @@ export function FinanceView({ leads }: { leads: Lead[] }) {
                 <tr key={lead.id}>
                   <td>
                     <strong>{lead.handle}</strong>
+                  </td>
+                  <td>
+                    <span className="batch-chip">
+                      <Layers3 size={12} />
+                      {lead.batchName}
+                    </span>
                   </td>
                   <td>{lead.offer}</td>
                   <td>R$ {lead.amount}</td>
@@ -74,6 +98,13 @@ export function FinanceView({ leads }: { leads: Lead[] }) {
                   </td>
                 </tr>
               ))}
+              {commercialLeads.length === 0 && (
+                <tr>
+                  <td className="table-empty" colSpan={6}>
+                    Nenhum pagamento encontrado neste lote.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

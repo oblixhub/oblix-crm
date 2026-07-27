@@ -56,13 +56,14 @@ const statusLabels: Record<ValidationStatus, string> = {
   discarded: "Descartados",
 };
 
-const VALIDATION_WORKSPACE_STORAGE_KEY = "oblix-crm-validation-workspace-v1";
+const VALIDATION_WORKSPACE_STORAGE_KEY = "oblix-crm-validation-workspace-v2";
 
 type ValidationWorkspace = {
   activeBatch?: string;
   status?: ValidationStatus;
-  selectedId?: number | null;
+  selectedHandle?: string | null;
   validationMode?: "individual" | "batch";
+  query?: string;
 };
 
 const loadValidationWorkspace = (): ValidationWorkspace => {
@@ -79,11 +80,13 @@ const loadValidationWorkspace = (): ValidationWorkspace => {
         parsed.status === "discarded"
           ? parsed.status
           : undefined,
-      selectedId: typeof parsed.selectedId === "number" ? parsed.selectedId : null,
+      selectedHandle:
+        typeof parsed.selectedHandle === "string" ? parsed.selectedHandle : null,
       validationMode:
         parsed.validationMode === "batch" || parsed.validationMode === "individual"
           ? parsed.validationMode
           : undefined,
+      query: typeof parsed.query === "string" ? parsed.query : "",
     };
   } catch {
     return {};
@@ -121,10 +124,10 @@ export function ValidationQueue({
   const [status, setStatus] = useState<ValidationStatus>(
     () => restoredWorkspace.status ?? "pending",
   );
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(() => restoredWorkspace.query ?? "");
   const deferredQuery = useDeferredValue(query);
-  const [selectedId, setSelectedId] = useState<number | null>(
-    () => restoredWorkspace.selectedId ?? null,
+  const [selectedHandle, setSelectedHandle] = useState<string | null>(
+    () => restoredWorkspace.selectedHandle ?? null,
   );
   const [priority, setPriority] = useState<Priority>("Normal");
   const [owner, setOwner] = useState<Owner>("Você");
@@ -138,6 +141,24 @@ export function ValidationQueue({
   const [batchOwner, setBatchOwner] = useState<Owner>("Você");
   const [confirmBatch, setConfirmBatch] = useState(false);
 
+  const persistWorkspace = (patch: Partial<ValidationWorkspace> = {}) => {
+    try {
+      window.sessionStorage.setItem(
+        VALIDATION_WORKSPACE_STORAGE_KEY,
+        JSON.stringify({
+          activeBatch,
+          status,
+          selectedHandle,
+          validationMode,
+          query,
+          ...patch,
+        }),
+      );
+    } catch {
+      // The queue remains usable if browser storage is unavailable.
+    }
+  };
+
   useEffect(() => {
     if (!batches.length) return;
     setActiveBatch((current) =>
@@ -146,15 +167,8 @@ export function ValidationQueue({
   }, [batches]);
 
   useEffect(() => {
-    try {
-      window.sessionStorage.setItem(
-        VALIDATION_WORKSPACE_STORAGE_KEY,
-        JSON.stringify({ activeBatch, status, selectedId, validationMode }),
-      );
-    } catch {
-      // The validation queue remains usable if browser storage is unavailable.
-    }
-  }, [activeBatch, selectedId, status, validationMode]);
+    persistWorkspace();
+  }, [activeBatch, query, selectedHandle, status, validationMode]);
 
   const batchLeads = leads.filter((lead) => lead.batchName === activeBatch);
   const counts = {
@@ -182,7 +196,7 @@ export function ValidationQueue({
   }, [activeBatch, deferredQuery, leads, status]);
 
   const selectedLead =
-    queue.find((lead) => lead.id === selectedId) ?? queue[0] ?? null;
+    queue.find((lead) => lead.handle === selectedHandle) ?? queue[0] ?? null;
   const completed = counts.valid + counts.discarded;
   const progress = batchLeads.length
     ? Math.round((completed / batchLeads.length) * 100)
@@ -190,6 +204,11 @@ export function ValidationQueue({
 
   const approve = () => {
     if (!selectedLead) return;
+    const selectedIndex = queue.findIndex(
+      (lead) => lead.handle === selectedLead.handle,
+    );
+    const nextLead = queue[selectedIndex + 1] ?? queue[selectedIndex - 1] ?? null;
+    setSelectedHandle(nextLead?.handle ?? null);
     onValidate(selectedLead.id, {
       priority,
       owner,
@@ -202,6 +221,11 @@ export function ValidationQueue({
 
   const discard = () => {
     if (!selectedLead) return;
+    const selectedIndex = queue.findIndex(
+      (lead) => lead.handle === selectedLead.handle,
+    );
+    const nextLead = queue[selectedIndex + 1] ?? queue[selectedIndex - 1] ?? null;
+    setSelectedHandle(nextLead?.handle ?? null);
     onDiscard(
       selectedLead.id,
       discardReason.trim() || "Perfil fora do critério de prospecção.",
@@ -265,7 +289,7 @@ export function ValidationQueue({
             value={activeBatch}
             onChange={(event) => {
               setActiveBatch(event.target.value);
-              setSelectedId(null);
+              setSelectedHandle(null);
               setValidationMode("individual");
               setConfirmBatch(false);
             }}
@@ -348,7 +372,7 @@ export function ValidationQueue({
               disabled={counts.pending === 0}
               onClick={() => {
                 setValidationMode("batch");
-                setSelectedId(null);
+                setSelectedHandle(null);
               }}
             >
               <span>
@@ -376,7 +400,7 @@ export function ValidationQueue({
             className={status === item ? "active" : ""}
             onClick={() => {
               setStatus(item);
-              setSelectedId(null);
+              setSelectedHandle(null);
               setConfirmBatch(false);
             }}
           >
@@ -513,7 +537,10 @@ export function ValidationQueue({
               <button
                 key={lead.id}
                 className={selectedLead?.id === lead.id ? "active" : ""}
-                onClick={() => setSelectedId(lead.id)}
+                onClick={() => {
+                  setSelectedHandle(lead.handle);
+                  persistWorkspace({ selectedHandle: lead.handle });
+                }}
               >
                 <span>{lead.handle.replace("@", "").slice(0, 2).toUpperCase()}</span>
                 <i>
@@ -549,6 +576,9 @@ export function ValidationQueue({
                 href={selectedLead.instagramUrl}
                 target="_blank"
                 rel="noreferrer"
+                onClick={() =>
+                  persistWorkspace({ selectedHandle: selectedLead.handle })
+                }
               >
                 Abrir Instagram
                 <ExternalLink size={16} />

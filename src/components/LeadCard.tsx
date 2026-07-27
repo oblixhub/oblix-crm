@@ -4,6 +4,7 @@ import {
   Check,
   ExternalLink,
   Flag,
+  Layers3,
 } from "lucide-react";
 import { ownerLabels, type Lead, type Priority } from "../types";
 import { ContactActions } from "./ContactActions";
@@ -97,6 +98,10 @@ export function LeadCard({
         </button>
 
         <div className="lead-card-meta">
+          <span className="batch-chip" title={`Origem: ${lead.batchName}`}>
+            <Layers3 size={13} />
+            {lead.batchName}
+          </span>
           <label
             className={`priority-control priority-${lead.priority.toLowerCase()}`}
             onClick={(event) => event.stopPropagation()}

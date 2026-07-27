@@ -1,5 +1,4 @@
 import {
-  Bell,
   ChevronDown,
   CircleDollarSign,
   ClipboardCheck,
@@ -10,6 +9,7 @@ import {
   MessageSquareText,
   Moon,
   Search,
+  ShieldCheck,
   Sun,
   Users,
   X,
@@ -41,23 +41,47 @@ const mobileNavItems = navItems.filter((item) =>
 interface AppShellProps {
   active: NavKey;
   theme: "light" | "dark";
+  profileName: string;
+  profileEmail: string;
+  profileRole: string;
+  signingOut: boolean;
   onNavigate: (key: NavKey) => void;
   onToggleTheme: () => void;
+  onSignOut: () => void;
   children: ReactNode;
 }
 
 export function AppShell({
   active,
   theme,
+  profileName,
+  profileEmail,
+  profileRole,
+  signingOut,
   onNavigate,
   onToggleTheme,
+  onSignOut,
   children,
 }: AppShellProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const profileInitials = profileName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase();
 
   const navigate = (key: NavKey) => {
     onNavigate(key);
     setMobileOpen(false);
+    setProfileOpen(false);
+  };
+
+  const handleSignOut = () => {
+    setProfileOpen(false);
+    onSignOut();
   };
 
   return (
@@ -99,17 +123,47 @@ export function AppShell({
               <span />
             </i>
           </button>
-          <button className="sidebar-profile">
-            <span className="avatar avatar--primary">V</span>
-            <span>
-              <strong>Você</strong>
-              <small>Operador</small>
-            </span>
-            <ChevronDown size={15} />
-          </button>
-          <button className="nav-item sidebar-logout">
+          <div className="sidebar-profile-menu">
+            <button
+              className="sidebar-profile"
+              onClick={() => setProfileOpen((current) => !current)}
+              aria-expanded={profileOpen}
+              aria-controls="account-menu"
+            >
+              <span className="avatar avatar--primary">
+                {profileInitials || "OB"}
+              </span>
+              <span>
+                <strong>{profileName}</strong>
+                <small>{profileRole}</small>
+              </span>
+              <ChevronDown
+                className={profileOpen ? "is-open" : ""}
+                size={15}
+              />
+            </button>
+            {profileOpen && (
+              <div className="profile-popover" id="account-menu">
+                <span className="profile-popover-role">
+                  <ShieldCheck size={15} />
+                  {profileRole}
+                </span>
+                <strong>{profileName}</strong>
+                <small>{profileEmail}</small>
+                <button onClick={handleSignOut} disabled={signingOut}>
+                  <LogOut size={16} />
+                  {signingOut ? "Saindo…" : "Sair desta conta"}
+                </button>
+              </div>
+            )}
+          </div>
+          <button
+            className="nav-item sidebar-logout"
+            onClick={handleSignOut}
+            disabled={signingOut}
+          >
             <LogOut size={18} />
-            <span>Sair</span>
+            <span>{signingOut ? "Saindo…" : "Sair"}</span>
           </button>
         </div>
       </aside>
@@ -144,10 +198,6 @@ export function AppShell({
             title={theme === "dark" ? "Tema claro" : "Tema escuro"}
           >
             {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
-          </button>
-          <button className="notification-button" aria-label="Notificações">
-            <Bell size={19} strokeWidth={1.75} />
-            <span>2</span>
           </button>
         </header>
         <main className="app-main">{children}</main>

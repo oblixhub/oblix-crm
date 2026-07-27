@@ -1,6 +1,5 @@
 import {
   AlertCircle,
-  ArrowLeft,
   ArrowRight,
   CalendarDays,
   CalendarRange,
@@ -8,6 +7,7 @@ import {
   ChevronDown,
   Clock3,
   Import,
+  Layers3,
   ListFilter,
   Plus,
   Search,
@@ -15,7 +15,8 @@ import {
   UsersRound,
 } from "lucide-react";
 import { useDeferredValue, useMemo, useState } from "react";
-import { ownerLabels, type Lead, type Owner, type Priority, type Stage, type WeekDay } from "../types";
+import { ALL_BATCHES, getBatchNames, matchesBatch } from "../lib/leads";
+import { ownerLabels, owners, type Lead, type Owner, type Priority, type Stage, type WeekDay } from "../types";
 import { LeadCard, ownerName } from "./LeadCard";
 
 type DayFilter = WeekDay | "Atrasados" | "Todos";
@@ -65,10 +66,12 @@ export function Dashboard({
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
   const [owner, setOwner] = useState<Owner | "Todos">("Todos");
+  const [batch, setBatch] = useState<string>(ALL_BATCHES);
   const [stage, setStage] = useState<Stage | "Todos">("Todos");
   const [priority, setPriority] = useState<Priority | "Todas">("Todas");
   const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set());
   const [page, setPage] = useState(1);
+  const batches = useMemo(() => getBatchNames(leads), [leads]);
 
   const counts = useMemo(() => {
     const result: Record<DayFilter, number> = {
@@ -105,6 +108,7 @@ export function Dashboard({
         return (
           dayMatches &&
           queryMatches &&
+          matchesBatch(lead, batch) &&
           (owner === "Todos" || lead.owner === owner) &&
           (stage === "Todos" || lead.stage === stage) &&
           (priority === "Todas" || lead.priority === priority)
@@ -116,7 +120,7 @@ export function Dashboard({
           priorityWeight[a.priority] - priorityWeight[b.priority] ||
           a.dueTime.localeCompare(b.dueTime),
       );
-  }, [activeDay, deferredQuery, leads, owner, priority, stage]);
+  }, [activeDay, batch, deferredQuery, leads, owner, priority, stage]);
 
   const pageSize = 24;
   const totalPages = Math.max(1, Math.ceil(filteredLeads.length / pageSize));
@@ -132,6 +136,7 @@ export function Dashboard({
   ).length;
   const activeFilterCount =
     Number(Boolean(query.trim())) +
+    Number(batch !== ALL_BATCHES) +
     Number(owner !== "Todos") +
     Number(stage !== "Todos") +
     Number(priority !== "Todas");
@@ -151,10 +156,18 @@ export function Dashboard({
         (lead) => lead.owner === "Sócia" && lead.scheduleDay === "Hoje",
       ).length,
     },
+    {
+      name: "Equipe",
+      total: leads.filter((lead) => lead.owner === "Equipe").length,
+      today: leads.filter(
+        (lead) => lead.owner === "Equipe" && lead.scheduleDay === "Hoje",
+      ).length,
+    },
   ];
 
   const clearFilters = () => {
     setQuery("");
+    setBatch(ALL_BATCHES);
     setOwner("Todos");
     setStage("Todos");
     setPriority("Todas");
@@ -179,17 +192,11 @@ export function Dashboard({
           <h1>Fila de hoje</h1>
           <p>Veja o que precisa de atenção e avance um contato por vez.</p>
         </div>
-        <div className="week-switcher" aria-label="Semana atual">
-          <button aria-label="Semana anterior">
-            <ArrowLeft size={18} />
-          </button>
+        <div className="week-switcher" aria-label="Fila atual">
           <span>
             <CalendarRange size={18} />
-            Semana atual
+            Fila atual
           </span>
-          <button aria-label="Próxima semana">
-            <ArrowRight size={18} />
-          </button>
         </div>
         <div className="operations-heading-actions">
           <button className="button button--primary" onClick={onNewLead}>
@@ -214,7 +221,7 @@ export function Dashboard({
             <span>Próxima ação recomendada</span>
             <strong>{nextLead.nextAction}</strong>
             <small>
-              {nextLead.handle} · {ownerName(nextLead.owner)}
+              {nextLead.handle} · {nextLead.batchName} · {ownerName(nextLead.owner)}
               {nextLead.overdue ? " · Está atrasado" : ` · ${nextLead.dueTime}`}
             </small>
           </div>
@@ -259,13 +266,6 @@ export function Dashboard({
             </span>
           </div>
         ))}
-        <div className="team-member-load is-future">
-          <Plus size={18} />
-          <span>
-            <strong>Próximo vendedor</strong>
-            <small>Capacidade pronta para crescer</small>
-          </span>
-        </div>
       </section>
 
       <section className="operations-summary" aria-label="Resumo operacional">
@@ -346,10 +346,19 @@ export function Dashboard({
               />
             </label>
             <FilterSelect
+              label="Lote"
+              value={batch}
+              onChange={(value) => {
+                setBatch(value);
+                setPage(1);
+              }}
+              options={[ALL_BATCHES, ...batches]}
+            />
+            <FilterSelect
               label="Responsável"
               value={owner}
               onChange={(value) => setOwner(value as Owner | "Todos")}
-              options={["Todos", "Você", "Sócia"]}
+              options={["Todos", ...owners]}
               formatOption={(option) =>
                 option === "Todos" ? option : ownerLabels[option as Owner]
               }
@@ -390,6 +399,10 @@ export function Dashboard({
             <button onClick={() => onBulkOwner(selected, "Sócia")}>
               <UserRoundCog size={18} />
               Passar para Raiza
+            </button>
+            <button onClick={() => onBulkOwner(selected, "Equipe")}>
+              <Layers3 size={18} />
+              Deixar com a equipe
             </button>
             <button onClick={() => onBulkStage(selected, "Contatar")}>
               <ArrowRight size={18} />

@@ -7,11 +7,12 @@ export type NavKey =
   | "finance"
   | "messages";
 
-export type Owner = "Você" | "Sócia";
-export const owners: readonly Owner[] = ["Você", "Sócia"];
+export type Owner = "Você" | "Sócia" | "Equipe";
+export const owners: readonly Owner[] = ["Você", "Sócia", "Equipe"];
 export const ownerLabels: Record<Owner, string> = {
   "Você": "Hugo",
   "Sócia": "Raiza",
+  "Equipe": "Equipe",
 };
 export type Priority = "Urgente" | "Alta" | "Normal" | "Baixa";
 export type ValidationStatus = "pending" | "valid" | "discarded";
