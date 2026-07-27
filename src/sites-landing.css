@@ -120,7 +120,7 @@ svg {
 }
 
 .brand-lockup--inverse .brand-symbol {
-  filter: none;
+  filter: invert(1);
 }
 
 .brand-lockup--inverse .brand-wordmark {

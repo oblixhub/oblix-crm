@@ -1,4 +1,4 @@
-import type { ImgHTMLAttributes } from "react";
+import { useEffect, type ImgHTMLAttributes } from "react";
 import { SitesMobileNavigation } from "./SitesMobileNavigation";
 import "../sites-landing.css";
 
@@ -135,7 +135,7 @@ function Brand({ inverse = false }: { inverse?: boolean }) {
       <span className="brand-symbol-frame" aria-hidden="true">
         <AssetImage
           className="brand-symbol"
-          src="/brand/oblix-symbol-xx.svg"
+          src="/brand/oblix-symbol-official.svg"
           width={96}
           height={48}
           alt=""
@@ -436,7 +436,7 @@ function FinalContact() {
     <section className="final-contact" id="contato">
       <div className="final-symbol" aria-hidden="true">
         <AssetImage
-          src="/brand/oblix-symbol-xx.svg"
+          src="/brand/oblix-symbol-official.svg"
           width={96}
           height={48}
           alt=""
@@ -458,8 +458,8 @@ function FinalContact() {
             Quero conversar
             <ArrowIcon diagonal />
           </a>
-          <a className="contact-email" href="mailto:hugo.oblix@gmail.com">
-            hugo.oblix@gmail.com
+          <a className="contact-email" href="mailto:studio.oblixhub@gmail.com">
+            studio.oblixhub@gmail.com
           </a>
         </div>
       </div>
@@ -473,6 +473,14 @@ function FinalContact() {
 }
 
 export function PortalHome() {
+  useEffect(() => {
+    const previousTitle = document.title;
+    document.title = "OBLIX Sites — Sites sob medida para negócios";
+    return () => {
+      document.title = previousTitle;
+    };
+  }, []);
+
   return (
     <main className="marketing-page">
       <Hero />

@@ -4,7 +4,7 @@ export function Brand({ compact = false }: { compact?: boolean }) {
       <span className="brand-symbol-frame" aria-hidden="true">
         <img
           className="brand-symbol"
-          src="/brand/oblix-symbol-xx.svg"
+          src="/brand/oblix-symbol-official.svg"
           width="96"
           height="48"
           alt=""

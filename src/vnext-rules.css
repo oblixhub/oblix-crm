@@ -110,6 +110,10 @@
   object-fit: contain;
 }
 
+:root[data-theme="dark"] .brand-symbol {
+  filter: invert(1);
+}
+
 .brand-wordmark {
   width: 104px;
 }
