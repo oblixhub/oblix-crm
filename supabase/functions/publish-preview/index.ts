@@ -1,6 +1,13 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { unzipSync } from "npm:fflate@0.8.2";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import {
+  contentTypeFor,
+  encodePathForStorage,
+  parseZipEntries,
+  buildPreviewManifest,
+} from "./engine.js";
+import { createPreviewToken, buildPreviewTokenConfig } from "./token.js";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -10,14 +17,16 @@ const corsHeaders = {
 };
 
 const MAX_ZIP_BYTES = 20 * 1024 * 1024;
-const MAX_UNCOMPRESSED_BYTES = 45 * 1024 * 1024;
-const MAX_FILES = 300;
+const PREVIEW_TOKEN_SECRET =
+  Deno.env.get("PREVIEW_TOKEN_SECRET") ??
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ??
+  "";
+const PREVIEW_TOKEN_TTL_SECONDS = Number.parseInt(
+  Deno.env.get("PREVIEW_TOKEN_TTL_SECONDS") ?? "1209600",
+  10,
+);
 
-const response = (body: Record<string, unknown>, status = 200) =>
-  new Response(JSON.stringify(body), { status, headers: corsHeaders });
-
-const normalizeHandle = (value: string) =>
-  `@${value.trim().replace(/^@+/, "").toLowerCase()}`;
+const normalizeHandle = (value: string) => `@${value.trim().replace(/^@+/, "").toLowerCase()}`;
 
 const toSlug = (value: string) =>
   value
@@ -29,43 +38,58 @@ const toSlug = (value: string) =>
     .replace(/^-+|-+$/g, "")
     .slice(0, 80);
 
-const isSafePath = (path: string) =>
-  Boolean(path) &&
-  !path.startsWith("/") &&
-  !path.startsWith("\\") &&
-  !path.includes("\\") &&
-  !path.includes(":") &&
-  !path.split("/").some((part) => part === ".." || part === ".");
+const hasAbsoluteReferences = (rawText: string) =>
+  /(?:src|href|action|fetch|url)\s*=\s*['"]\/(?!\/)/i.test(rawText);
 
-const contentTypeFor = (path: string) => {
-  const extension = path.split(".").pop()?.toLowerCase();
-  const types: Record<string, string> = {
-    html: "text/html; charset=utf-8",
-    htm: "text/html; charset=utf-8",
-    css: "text/css; charset=utf-8",
-    js: "text/javascript; charset=utf-8",
-    mjs: "text/javascript; charset=utf-8",
-    json: "application/json; charset=utf-8",
-    svg: "image/svg+xml",
-    png: "image/png",
-    jpg: "image/jpeg",
-    jpeg: "image/jpeg",
-    webp: "image/webp",
-    gif: "image/gif",
-    avif: "image/avif",
-    ico: "image/x-icon",
-    woff: "font/woff",
-    woff2: "font/woff2",
-    ttf: "font/ttf",
-    otf: "font/otf",
-    mp4: "video/mp4",
-    webm: "video/webm",
-    mp3: "audio/mpeg",
-  };
-  return types[extension ?? ""] ?? "application/octet-stream";
+const response = (body: Record<string, unknown>, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: corsHeaders });
+
+const previewPortalOrigin = (request: Request) => {
+  const configured = Deno.env.get("PREVIEW_PORTAL_ORIGIN")?.replace(/\/$/, "");
+  if (configured) return configured;
+
+  const publicApp = Deno.env.get("VITE_PUBLIC_APP_URL")?.replace(/\/$/, "");
+  if (publicApp) return publicApp;
+
+  const requestOrigin = (() => {
+    try {
+      return new URL(request.url).origin.replace(/\/$/, "");
+    } catch {
+      return "";
+    }
+  })();
+
+  return requestOrigin;
 };
 
-type Entry = { path: string; bytes: Uint8Array };
+const previewContentOrigin = (request: Request) => {
+  const configured = Deno.env.get("PREVIEW_CONTENT_ORIGIN")?.replace(/\/$/, "");
+  if (configured) return configured;
+
+  const publicApp = Deno.env.get("PUBLIC_APP_URL")?.replace(/\/$/, "");
+  if (publicApp) return publicApp;
+
+  const requestOrigin = (() => {
+    try {
+      return new URL(request.url).origin.replace(/\/$/, "");
+    } catch {
+      return "";
+    }
+  })();
+
+  return requestOrigin;
+};
+
+const buildPreviewSiteUrl = (
+  request: Request,
+  token: string,
+  slug: string,
+  version: number,
+) => {
+  const tokenPart = encodeURIComponent(token);
+  const slugPart = encodeURIComponent(slug);
+  return `${previewContentOrigin(request)}/preview-content/${tokenPart}/${slugPart}/v${version}/`;
+};
 
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") {
@@ -87,15 +111,16 @@ Deno.serve(async (request) => {
       return response({ error: "Dados do preview inválidos." }, 400);
     }
 
-    const userClient = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
-      { global: { headers: { Authorization: authorization } } },
-    );
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+
+    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authorization } },
+    });
     const token = authorization.replace("Bearer ", "");
     const { data: userData, error: userError } = await userClient.auth.getUser(token);
     if (userError || !userData.user) {
-      return response({ error: "Sessão inválida. Entre no CRM novamente." }, 401);
+      return response({ error: "Sessão inválida. Faça login novamente." }, 401);
     }
 
     if (!sourcePath.startsWith(`${leadId}/source/`)) {
@@ -103,14 +128,16 @@ Deno.serve(async (request) => {
     }
 
     const admin = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
+      supabaseUrl,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
     );
+
     const { data: lead, error: leadError } = await admin
       .from("leads")
       .select("id, handle, preview_version, preview_slug")
       .eq("id", leadId)
       .maybeSingle();
+
     if (leadError) throw leadError;
     if (!lead) return response({ error: "Lead não encontrado." }, 404);
 
@@ -118,7 +145,12 @@ Deno.serve(async (request) => {
       .storage
       .from("preview-zips")
       .download(sourcePath);
+
     if (zipError) throw zipError;
+    if (!zipFile) {
+      return response({ error: "Arquivo ZIP não encontrado." }, 404);
+    }
+
     if (zipFile.size > MAX_ZIP_BYTES) {
       return response({ error: "O ZIP pode ter no máximo 20 MB." }, 400);
     }
@@ -127,102 +159,143 @@ Deno.serve(async (request) => {
     try {
       extracted = unzipSync(new Uint8Array(await zipFile.arrayBuffer()));
     } catch {
-      return response({ error: "Não foi possível abrir este ZIP. Exporte novamente pelo Claude Design." }, 400);
+      return response(
+        {
+          error:
+            "Não foi possível abrir este ZIP. Exporte novamente pelo Claude Design.",
+        },
+        400,
+      );
     }
 
-    const entries: Entry[] = Object.entries(extracted)
-      .filter(([path, bytes]) =>
-        isSafePath(path) &&
-        !path.startsWith("__MACOSX/") &&
-        !path.endsWith("/") &&
-        bytes.byteLength > 0,
-      )
-      .map(([path, bytes]) => ({ path, bytes }));
-
-    const totalBytes = entries.reduce((total, entry) => total + entry.bytes.byteLength, 0);
-    if (entries.length === 0) {
-      return response({ error: "O ZIP não possui arquivos de site para publicar." }, 400);
-    }
-    if (entries.length > MAX_FILES || totalBytes > MAX_UNCOMPRESSED_BYTES) {
-      return response({ error: "O ZIP tem arquivos demais ou é grande demais após descompactar." }, 400);
+    const parsed = parseZipEntries({ zipEntries: extracted });
+    if (parsed.error) {
+      return response(
+        { error: parsed.error, candidates: parsed.candidates ?? null },
+        400,
+      );
     }
 
-    const htmlEntries = entries.filter((entry) => /\.html?$/i.test(entry.path));
-    const mainEntry =
-      htmlEntries
-        .filter((entry) => /(^|\/)index\.html?$/i.test(entry.path))
-        .sort((a, b) => a.path.length - b.path.length)[0] ??
-      htmlEntries.sort((a, b) => a.path.length - b.path.length)[0];
-    if (!mainEntry) {
-      return response({ error: "O ZIP precisa conter um arquivo HTML principal." }, 400);
-    }
-
-    const mainDirectory = mainEntry.path.includes("/")
-      ? mainEntry.path.slice(0, mainEntry.path.lastIndexOf("/") + 1)
-      : "";
-    const entriesForPublish = entries
-      .filter((entry) => !mainDirectory || entry.path.startsWith(mainDirectory))
-      .map((entry) => ({
-        ...entry,
-        path: entry.path.slice(mainDirectory.length),
-      }));
-
-    const publishedMainPath = /(^|\/)index\.html?$/i.test(mainEntry.path)
-      ? "index.html"
-      : "index.html";
-    const normalizedEntries = entriesForPublish.map((entry) =>
-      entry.path === mainEntry.path.slice(mainDirectory.length)
-        ? { ...entry, path: publishedMainPath }
-        : entry,
-    );
-
-    const decodedHtml = new TextDecoder().decode(mainEntry.bytes);
-    const usesAbsoluteAssetPaths = /(?:src|href)=["']\/(?!\/)|url\(["']?\/(?!\/)/i.test(decodedHtml);
+    const { entries, entrypoint, removedOuterFolder } = parsed;
     const version = (lead.preview_version ?? 0) + 1;
     const previewSlug = lead.preview_slug || toSlug(normalizeHandle(lead.handle));
+
     if (!previewSlug) {
-      return response({ error: "Não foi possível criar o endereço do preview." }, 400);
+      return response(
+        { error: "Não foi possível criar o endereço do preview." },
+        400,
+      );
     }
-    const sitePrefix = `${previewSlug}/v${version}`;
 
-    for (const entry of normalizedEntries) {
-      const { error: uploadError } = await admin.storage
+    if (!PREVIEW_TOKEN_SECRET) {
+      return response(
+        { error: "Configuração de segurança do preview indisponível." },
+        500,
+      );
+    }
+
+    const tokenConfig = buildPreviewTokenConfig({
+      ttlSeconds: PREVIEW_TOKEN_TTL_SECONDS,
+    });
+    const previewToken = await createPreviewToken({
+      slug: previewSlug,
+      version: `v${version}`,
+      leadId: lead.id,
+      expiresAt: tokenConfig.expiresAt,
+      secret: PREVIEW_TOKEN_SECRET,
+    });
+
+    const previewPathBase = `${previewToken}/${previewSlug}/v${version}`;
+    const manifest = buildPreviewManifest({
+      previewSlug,
+      version,
+      leadId: lead.id,
+      entrypoint,
+      entries,
+      removedOuterFolder,
+    });
+
+    const uploads: Promise<unknown>[] = [];
+    for (const entry of entries) {
+      const filePath = `${previewPathBase}/${encodePathForStorage(entry.path)}`;
+      uploads.push(
+        admin.storage
+          .from("preview-sites")
+          .upload(filePath, new Blob([entry.bytes]), {
+            contentType: contentTypeFor(entry.path),
+            upsert: false,
+            cacheControl: entry.path === entrypoint.path ? "no-cache" : "31536000",
+          })
+          .then((upload) => {
+            if (upload.error) {
+              throw upload.error;
+            }
+          }),
+      );
+    }
+
+    uploads.push(
+      admin.storage
         .from("preview-sites")
-        .upload(`${sitePrefix}/${entry.path}`, new Blob([entry.bytes]), {
-          contentType: contentTypeFor(entry.path),
-          cacheControl: entry.path === "index.html" ? "60" : "31536000",
-          upsert: false,
-        });
-      if (uploadError) throw uploadError;
+        .upload(
+          `${previewPathBase}/.oblix-preview-manifest.json`,
+          new Blob([JSON.stringify(manifest)]),
+          {
+            contentType: "application/json; charset=utf-8",
+            upsert: false,
+          },
+        )
+        .then((result) => {
+          if (result.error) throw result.error;
+        }),
+    );
+
+    try {
+      await Promise.all(uploads);
+    } catch (uploadError) {
+      console.error(uploadError);
+      return response({ error: "Falha ao salvar arquivos do preview." }, 500);
     }
 
-    const siteUrl = `${Deno.env.get("SUPABASE_URL")}/storage/v1/object/public/preview-sites/${sitePrefix}/index.html`;
-    const previewUrl = `https://sites.oblixhub.com/preview/${previewSlug}`;
+    const previewUrl = `${previewPortalOrigin(request)}/preview/${encodeURIComponent(
+      previewSlug,
+    )}`;
+    const previewSiteUrl = buildPreviewSiteUrl(
+      request,
+      previewToken,
+      previewSlug,
+      version,
+    );
+
     const { error: updateError } = await admin
       .from("leads")
       .update({
         stage: "Preview",
         next_action: "Enviar acesso ao cliente",
         preview_url: previewUrl,
-        preview_site_url: siteUrl,
+        preview_site_url: previewSiteUrl,
         preview_source_path: sourcePath,
         preview_slug: previewSlug,
-        preview_file_name: sourcePath.split("/").pop()?.replace(/^\d+-/, "") ?? "site.zip",
+        preview_file_name:
+          sourcePath.split("/").pop()?.replace(/^\d+-/, "") ?? "site.zip",
         preview_version: version,
         preview_published_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
       .eq("id", lead.id);
+
     if (updateError) throw updateError;
 
     return response({
       success: true,
       previewUrl,
-      siteUrl,
+      previewSlug,
+      siteUrl: previewSiteUrl,
       version,
-      hasIndex: /(^|\/)index\.html?$/i.test(mainEntry.path),
-      relativePaths: !usesAbsoluteAssetPaths,
-      fileCount: normalizedEntries.length,
+      entrypoint: entrypoint.path,
+      relativePaths: !hasAbsoluteReferences(new TextDecoder().decode(entrypoint.bytes)),
+      hasIndex: true,
+      candidates: null,
     });
   } catch (error) {
     console.error(error);

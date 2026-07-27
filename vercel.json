@@ -1,12 +1,12 @@
 {
   "rewrites": [
     {
-      "source": "/preview/(.*)",
-      "destination": "/index.html"
+      "source": "/preview-content/(.*)",
+      "destination": "/api/preview-content?path=$1"
     },
     {
-      "source": "/leticia-preview-20260727",
-      "destination": "/previews/leticia-preview-20260727/index.html"
+      "source": "/preview/(.*)",
+      "destination": "/index.html"
     },
     {
       "source": "/(.*)",

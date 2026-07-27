@@ -1,5 +1,6 @@
 import { BadgeCheck, LockKeyhole, MessageSquareText } from "lucide-react";
 import type { Lead } from "../types";
+import { resolveLeadPreviewSource } from "../lib/preview-links";
 
 interface ClientPreviewProps {
   lead: Lead;
@@ -12,6 +13,7 @@ export function ClientPreview({
   onApprove,
   onRequestChanges,
 }: ClientPreviewProps) {
+  const preview = resolveLeadPreviewSource(lead.preview);
   return (
     <div className="client-preview">
       <div className="client-preview-security">
@@ -19,14 +21,25 @@ export function ClientPreview({
         Preview protegido · versão {lead.preview.version ?? 1}
       </div>
 
-      {lead.preview.publicUrl ? (
+      {preview.url ? (
         <iframe
           className="client-site-frame"
-          src={lead.preview.publicUrl}
+          src={preview.url}
           title={`Preview de ${lead.handle}`}
+          referrerPolicy="no-referrer"
+          sandbox="allow-scripts allow-forms allow-popups allow-top-navigation-by-user-activation allow-downloads"
         />
       ) : (
         <div className="sample-site client-site-preview">
+          <p
+            style={{
+              margin: "0 0 14px",
+              fontWeight: 600,
+            }}
+          >
+            {preview.message ??
+              "Este lead ainda está no formato antigo. Republique o preview para gerar acesso protegido."}
+          </p>
           <nav>
             <strong>{lead.category}</strong>
             <span>Início &nbsp; Serviços &nbsp; Contato</span>

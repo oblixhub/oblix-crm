@@ -6,6 +6,7 @@ import { ClientPreview } from "./components/ClientPreview";
 import { Dashboard } from "./components/Dashboard";
 import { FinanceView } from "./components/FinanceView";
 import { LeadDetail } from "./components/LeadDetail";
+import { resolveLeadPreviewSource } from "./lib/preview-links";
 import { LeadDirectory } from "./components/LeadDirectory";
 import { MessageLibrary } from "./components/MessageLibrary";
 import { MessageManager } from "./components/MessageManager";
@@ -278,8 +279,7 @@ const mapDbLead = (row: DbLead, index: number): Lead => ({
   discardReason: row.discard_reason ?? undefined,
   batchId: row.batch_id ?? undefined,
   batchName:
-    row.lead_batches?.name ??
-    (row.source_type === "manual" ? "Cadastro manual" : "Lote 1"),
+    row.lead_batches?.name ?? (row.source_type === "manual" ? "Cadastro manual" : "Lote 1"),
   sourceType: row.source_type ?? "excel",
   owner:
     row.owner === "Sócia" || row.owner === "Equipe" ? row.owner : "Você",
@@ -1076,6 +1076,7 @@ export default function App() {
       const { data, error } = await supabase.functions.invoke<{
         success?: boolean;
         previewUrl?: string;
+        previewSlug?: string;
         siteUrl?: string;
         version?: number;
         hasIndex?: boolean;
@@ -1101,7 +1102,7 @@ export default function App() {
               publicUrl: previewUrl,
               siteUrl,
               sourcePath,
-              slug: previewUrl.split("/").pop(),
+              slug: data.previewSlug ?? previewUrl.split("/").pop(),
               checklist: {
                 index: Boolean(data.hasIndex),
                 relativePaths: Boolean(data.relativePaths),
@@ -1224,17 +1225,35 @@ export default function App() {
   const openClientPreview = (leadId?: number) => {
     const id = leadId ?? selectedLead?.id;
     const lead = leads.find((item) => item.id === id);
-    if (lead?.preview.publicUrl) {
-      window.open(lead.preview.publicUrl, "_blank", "noopener,noreferrer");
+    if (!lead) return;
+
+    const previewSource = resolveLeadPreviewSource(lead.preview);
+    if (!previewSource.url) {
+      showToast(
+        previewSource.message ??
+          "Republique o lead para gerar a URL de preview protegida.",
+      );
       return;
     }
-    if (id) setModal({ type: "client-preview", leadId: id });
+
+    window.open(previewSource.url, "_blank", "noopener,noreferrer");
+    if (id) {
+      setModal({ type: "client-preview", leadId: id });
+    }
   };
 
   const copyPreviewLink = () => {
-    if (!selectedLead?.preview.publicUrl) return;
+    if (!selectedLead) return;
+    const previewSource = resolveLeadPreviewSource(selectedLead.preview);
+    if (!previewSource.url) {
+      showToast(
+        previewSource.message ??
+          "Republique o lead para gerar a URL de preview protegida.",
+      );
+      return;
+    }
     void navigator.clipboard
-      .writeText(selectedLead.preview.publicUrl)
+      .writeText(previewSource.url)
       .then(() => showToast("Link do cliente copiado."))
       .catch(() => showToast("Não foi possível copiar automaticamente. Abra o link para copiar."));
   };

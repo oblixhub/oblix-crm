@@ -1,6 +1,7 @@
 import { ArrowLeft, BadgeCheck, Eye, EyeOff, LoaderCircle, MessageSquareText } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { supabaseUrl } from "../lib/supabase";
+import { getPublicAppUrl, resolveLeadPreviewSource } from "../lib/preview-links";
 import { Brand } from "./Brand";
 
 type PreviewSession = {
@@ -53,14 +54,30 @@ export function PublicPreviewPortal({ slug }: { slug: string }) {
       if (!response.ok || !data.handle || !data.siteUrl) {
         throw new Error(data.error ?? "Não foi possível abrir este preview.");
       }
+
+      const resolvedSite = resolveLeadPreviewSource({
+        siteUrl: data.siteUrl,
+      });
+
+      if (!resolvedSite.url) {
+        throw new Error(
+          resolvedSite.message ??
+            "Esta prévia está em formato antigo e precisa ser republicada.",
+        );
+      }
+
       setSession({
         handle: data.handle,
         password: normalizeHandle(password),
-        siteUrl: data.siteUrl,
+        siteUrl: resolvedSite.url,
         version: data.version ?? 1,
       });
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "Não foi possível abrir este preview.");
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Não foi possível abrir este preview.",
+      );
     } finally {
       setLoading(false);
     }
@@ -86,14 +103,20 @@ export function PublicPreviewPortal({ slug }: { slug: string }) {
         }),
       });
       const data = (await response.json()) as { error?: string; message?: string };
-      if (!response.ok) throw new Error(data.error ?? "Não foi possível registrar sua resposta.");
+      if (!response.ok) {
+        throw new Error(data.error ?? "Não foi possível registrar sua resposta.");
+      }
       setNotice(data.message ?? "Resposta registrada. Obrigado!");
       if (action === "revision") {
         setRevision("");
         setRevisionOpen(false);
       }
     } catch (requestError) {
-      setNotice(requestError instanceof Error ? requestError.message : "Não foi possível registrar sua resposta.");
+      setNotice(
+        requestError instanceof Error
+          ? requestError.message
+          : "Não foi possível registrar sua resposta.",
+      );
     } finally {
       setSendingAction(false);
     }
@@ -102,22 +125,53 @@ export function PublicPreviewPortal({ slug }: { slug: string }) {
   if (session) {
     return (
       <main className="public-preview-page public-preview-page--open">
-        <iframe className="public-preview-frame" src={session.siteUrl} title={`Preview de ${session.handle}`} />
+        <iframe
+          className="public-preview-frame"
+          src={session.siteUrl}
+          title={`Preview de ${session.handle}`}
+          referrerPolicy="no-referrer"
+          sandbox="allow-scripts allow-forms allow-popups allow-top-navigation-by-user-activation allow-downloads"
+        />
         <aside className="public-preview-review" aria-label="Avaliação do preview">
           <span>O que achou do seu site?</span>
           {revisionOpen && (
             <label>
               <span>O que gostaria de ajustar?</span>
-              <textarea value={revision} onChange={(event) => setRevision(event.target.value)} placeholder="Ex.: trocar uma foto, corrigir um texto..." maxLength={1000} />
+              <textarea
+                value={revision}
+                onChange={(event) => setRevision(event.target.value)}
+                placeholder="Ex.: trocar uma foto, corrigir um texto..."
+                maxLength={1000}
+              />
             </label>
           )}
           <div className="public-preview-actions">
-            <button type="button" className="public-preview-revision" disabled={sendingAction} onClick={() => revisionOpen ? void submitAction("revision") : setRevisionOpen(true)}>
+            <button
+              type="button"
+              className="public-preview-revision"
+              disabled={sendingAction}
+              onClick={() => {
+                if (revisionOpen) {
+                  void submitAction("revision");
+                } else {
+                  setRevisionOpen(true);
+                }
+              }}
+            >
               <MessageSquareText size={18} />
               {revisionOpen ? "Enviar revisão" : "Pedir revisão"}
             </button>
-            <button type="button" className="public-preview-approve" disabled={sendingAction} onClick={() => void submitAction("approve")}>
-              {sendingAction ? <LoaderCircle className="spin" size={18} /> : <BadgeCheck size={19} />}
+            <button
+              type="button"
+              className="public-preview-approve"
+              disabled={sendingAction}
+              onClick={() => void submitAction("approve")}
+            >
+              {sendingAction ? (
+                <LoaderCircle className="spin" size={18} />
+              ) : (
+                <BadgeCheck size={19} />
+              )}
               Aprovar site
             </button>
           </div>
@@ -127,9 +181,11 @@ export function PublicPreviewPortal({ slug }: { slug: string }) {
     );
   }
 
+  const backUrl = `${getPublicAppUrl() || ""}/crm`;
+
   return (
     <main className="public-preview-page">
-      <a className="public-preview-back" href="https://oblix-crm.vercel.app" aria-label="Voltar">
+      <a className="public-preview-back" href={backUrl} aria-label="Voltar">
         <ArrowLeft size={17} />
         OBLIX
       </a>
@@ -139,13 +195,31 @@ export function PublicPreviewPortal({ slug }: { slug: string }) {
         <p>Use o seu @ do Instagram como usuário e senha para visualizar o site.</p>
         <label className="field">
           <span>Usuário</span>
-          <input value={username} onChange={(event) => setUsername(event.target.value)} placeholder="@seuperfil" autoComplete="username" required />
+          <input
+            value={username}
+            onChange={(event) => setUsername(event.target.value)}
+            placeholder="@seuperfil"
+            autoComplete="username"
+            required
+          />
         </label>
         <label className="field">
           <span>Senha</span>
           <div className="password-field">
-            <input type={showPassword ? "text" : "password"} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="@seuperfil" autoComplete="current-password" required />
-            <button type="button" className="password-toggle" aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"} onClick={() => setShowPassword((visible) => !visible)}>
+            <input
+              type={showPassword ? "text" : "password"}
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="@seuperfil"
+              autoComplete="current-password"
+              required
+            />
+            <button
+              type="button"
+              className="password-toggle"
+              aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
+              onClick={() => setShowPassword((visible) => !visible)}
+            >
               {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
           </div>
