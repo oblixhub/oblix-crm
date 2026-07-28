@@ -4,6 +4,7 @@ export type NavKey =
   | "prospecting"
   | "leads"
   | "previews"
+  | "portfolio"
   | "finance"
   | "messages";
 
@@ -223,4 +224,55 @@ export interface CrmSettings {
   dailyContactGoal: number;
   firstFollowUpDays: number;
   secondFollowUpDays: number;
+}
+
+export type PortfolioSourceType = "lead_preview" | "standalone_zip";
+export type PortfolioStatus = "draft" | "published" | "archived";
+
+export interface PortfolioProject {
+  id: string;
+  leadId?: string;
+  title: string;
+  slug: string;
+  category: string;
+  shortDescription: string;
+  description: string;
+  services: string[];
+  sourceType: PortfolioSourceType;
+  sourcePath?: string;
+  publicKey?: string;
+  currentVersion: number;
+  contentUrl?: string;
+  coverDesktopPath?: string;
+  coverMobilePath?: string;
+  coverDesktopUrl?: string;
+  coverMobileUrl?: string;
+  liveUrl?: string;
+  showLiveLink: boolean;
+  featured: boolean;
+  sortOrder: number;
+  status: PortfolioStatus;
+  publicationAuthorized: boolean;
+  authorizationNote: string;
+  publishedAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface PublicPortfolioProject {
+  id: string;
+  title: string;
+  slug: string;
+  category: string;
+  shortDescription: string;
+  description: string;
+  services: string[];
+  coverDesktopUrl?: string;
+  coverMobileUrl?: string;
+  contentUrl: string;
+  liveUrl?: string;
+  showLiveLink: boolean;
+  featured: boolean;
+  sortOrder: number;
+  publishedAt?: string;
 }

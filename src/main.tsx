@@ -9,8 +9,27 @@ import "./vnext-rules.css";
 
 const previewSlug = getPublicPreviewSlug(window.location.pathname);
 const isCrmRoute = window.location.pathname === "/crm" || window.location.pathname.startsWith("/crm/");
+const normalizedPath =
+  window.location.pathname === "/portifolio"
+    ? "/portfolio"
+    : window.location.pathname;
+if (normalizedPath !== window.location.pathname) {
+  window.history.replaceState({}, "", `${normalizedPath}${window.location.search}`);
+}
+const portfolioMatch = normalizedPath.match(/^\/portfolio\/([^/]+)\/?$/);
+const isPortfolioIndex = normalizedPath === "/portfolio" || normalizedPath === "/portfolio/";
 const SitesLanding = lazy(() =>
   import("./components/SitesLanding").then(({ PortalHome }) => ({ default: PortalHome })),
+);
+const PortfolioGallery = lazy(() =>
+  import("./components/PublicPortfolio").then(({ PortfolioGalleryPage }) => ({
+    default: PortfolioGalleryPage,
+  })),
+);
+const PortfolioCase = lazy(() =>
+  import("./components/PublicPortfolio").then(({ PortfolioCasePage }) => ({
+    default: PortfolioCasePage,
+  })),
 );
 
 createRoot(document.getElementById("root")!).render(
@@ -19,6 +38,14 @@ createRoot(document.getElementById("root")!).render(
       <PublicPreviewPortal slug={previewSlug} />
     ) : isCrmRoute ? (
       <App />
+    ) : isPortfolioIndex ? (
+      <Suspense fallback={null}>
+        <PortfolioGallery />
+      </Suspense>
+    ) : portfolioMatch ? (
+      <Suspense fallback={null}>
+        <PortfolioCase slug={decodeURIComponent(portfolioMatch[1])} />
+      </Suspense>
     ) : (
       <Suspense fallback={null}>
         <SitesLanding />

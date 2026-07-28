@@ -1,8 +1,27 @@
 {
+  "redirects": [
+    {
+      "source": "/portifolio",
+      "destination": "/portfolio",
+      "permanent": true
+    }
+  ],
   "rewrites": [
+    {
+      "source": "/portfolio-content/(.*)",
+      "destination": "/api/portfolio-content?path=$1"
+    },
     {
       "source": "/preview-content/(.*)",
       "destination": "/api/preview-content?path=$1"
+    },
+    {
+      "source": "/portfolio/(.*)",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/portfolio",
+      "destination": "/index.html"
     },
     {
       "source": "/preview/(.*)",

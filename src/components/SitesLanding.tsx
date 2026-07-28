@@ -1,4 +1,5 @@
 import { useEffect, type ImgHTMLAttributes } from "react";
+import { FeaturedPortfolioSection } from "./FeaturedPortfolioSection";
 import { SitesMobileNavigation } from "./SitesMobileNavigation";
 import "../sites-landing.css";
 
@@ -22,7 +23,7 @@ function AssetImage({ fill, priority, style, ...props }: AssetImageProps) {
 }
 
 const navigation = [
-  { label: "Projetos", href: "#projetos" },
+  { label: "Portfólio", href: "/portfolio" },
   { label: "Processo", href: "#processo" },
   { label: "Entrega", href: "#entrega" },
   { label: "Dúvidas", href: "#duvidas" },
@@ -335,9 +336,9 @@ function DirectionSheet({
   );
 }
 
-function ProjectsSection() {
+function DirectionSection() {
   return (
-    <section className="projects section-light" id="projetos">
+    <section className="projects section-light" id="direcao">
       <div className="section-heading-grid">
         <h2>Sites que começam por você.</h2>
         <p>
@@ -484,7 +485,8 @@ export function PortalHome() {
   return (
     <main className="marketing-page">
       <Hero />
-      <ProjectsSection />
+      <FeaturedPortfolioSection />
+      <DirectionSection />
       <ProcessSection />
       <DeliverySection />
       <FaqSection />

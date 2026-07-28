@@ -72,6 +72,11 @@ const PreviewHub = lazy(() =>
     default: module.PreviewHub,
   })),
 );
+const PortfolioManager = lazy(() =>
+  import("./components/PortfolioManager").then((module) => ({
+    default: module.PortfolioManager,
+  })),
+);
 const ProspectingBoard = lazy(() =>
   import("./components/ProspectingBoard").then((module) => ({
     default: module.ProspectingBoard,
@@ -97,6 +102,7 @@ const navKeys: readonly NavKey[] = [
   "prospecting",
   "leads",
   "previews",
+  "portfolio",
   "finance",
   "messages",
 ];
@@ -1043,6 +1049,13 @@ export default function App() {
     [leads, selectedLeadId],
   );
   const isOwner = currentProfile?.role !== "seller";
+  const effectiveActiveNav =
+    !isOwner &&
+    (activeNav === "previews" ||
+      activeNav === "portfolio" ||
+      activeNav === "finance")
+      ? "dashboard"
+      : activeNav;
   const ownerOptions = useMemo<Owner[]>(
     () => {
       if (currentProfile?.role === "seller") {
@@ -1054,6 +1067,12 @@ export default function App() {
     },
     [currentProfile, teamProfiles],
   );
+
+  useEffect(() => {
+    if (effectiveActiveNav !== activeNav) {
+      setActiveNav(effectiveActiveNav);
+    }
+  }, [activeNav, effectiveActiveNav]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -1609,7 +1628,10 @@ export default function App() {
   };
 
   const navigate = (key: NavKey) => {
-    if (!isOwner && (key === "finance" || key === "previews")) {
+    if (
+      !isOwner &&
+      (key === "finance" || key === "previews" || key === "portfolio")
+    ) {
       setActiveNav("dashboard");
       setSelectedLeadId(null);
       showToast("Esta área é privada para os sócios.");
@@ -2944,7 +2966,7 @@ export default function App() {
         onSaveCommercial={saveCommercialBundle}
       />
     );
-  } else if (activeNav === "dashboard") {
+  } else if (effectiveActiveNav === "dashboard") {
     content = (
       <Dashboard
         leads={leads.filter(
@@ -2966,7 +2988,7 @@ export default function App() {
         onDailyTargetChange={changeDailyTarget}
       />
     );
-  } else if (activeNav === "validation") {
+  } else if (effectiveActiveNav === "validation") {
     content = (
       <ValidationQueue
         leads={leads}
@@ -2978,7 +3000,7 @@ export default function App() {
         ownerOptions={ownerOptions}
       />
     );
-  } else if (activeNav === "prospecting") {
+  } else if (effectiveActiveNav === "prospecting") {
     content = (
       <ProspectingBoard
         leads={leads.filter(
@@ -2999,7 +3021,7 @@ export default function App() {
         onSaveOutcome={saveProspectingOutcome}
       />
     );
-  } else if (activeNav === "leads") {
+  } else if (effectiveActiveNav === "leads") {
     content = (
       <LeadDirectory
         leads={leads.filter((lead) => lead.validationStatus === "valid")}
@@ -3012,7 +3034,7 @@ export default function App() {
         availableTags={availableTags}
       />
     );
-  } else if (activeNav === "previews") {
+  } else if (effectiveActiveNav === "previews") {
     content = (
       <PreviewHub
         leads={leads.filter((lead) => lead.validationStatus === "valid")}
@@ -3020,7 +3042,15 @@ export default function App() {
         onOpenClientPreview={openClientSharePreview}
       />
     );
-  } else if (activeNav === "messages") {
+  } else if (effectiveActiveNav === "portfolio") {
+    content = (
+      <PortfolioManager
+        leads={leads.filter((lead) => lead.validationStatus === "valid")}
+        currentUserId={session?.user.id}
+        onToast={showToast}
+      />
+    );
+  } else if (effectiveActiveNav === "messages") {
     content = (
       <MessageManager
         templates={templates}
@@ -3053,7 +3083,7 @@ export default function App() {
   return (
     <>
       <AppShell
-        active={activeNav}
+        active={effectiveActiveNav}
         theme={theme}
         profileName={
           currentProfile?.display_name ??

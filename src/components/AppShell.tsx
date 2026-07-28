@@ -3,6 +3,7 @@ import {
   CircleDollarSign,
   ClipboardCheck,
   Eye,
+  FolderKanban,
   Home,
   LogOut,
   Menu,
@@ -28,6 +29,7 @@ const navItems: Array<{
   { key: "prospecting", label: "Prospecção", icon: Search },
   { key: "leads", label: "Leads", icon: Users },
   { key: "previews", label: "Sites", icon: Eye },
+  { key: "portfolio", label: "Portfólio", icon: FolderKanban },
   { key: "finance", label: "Financeiro", icon: CircleDollarSign },
   { key: "messages", label: "Mensagens", icon: MessageSquareText },
 ];
@@ -64,7 +66,10 @@ export function AppShell({
   const visibleNavItems = isOwner
     ? navItems
     : navItems.filter(
-        (item) => item.key !== "finance" && item.key !== "previews",
+        (item) =>
+          item.key !== "finance" &&
+          item.key !== "previews" &&
+          item.key !== "portfolio",
       );
   const mobileNavItems = visibleNavItems.filter((item) =>
     isOwner
