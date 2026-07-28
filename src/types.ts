@@ -115,6 +115,7 @@ export interface Lead {
   offer: "Com domínio" | "Sem domínio";
   amount: number;
   paymentStatus: "Não aprovado" | "Aguardando PIX" | "Pago";
+  initialMessageSent: boolean;
   activities: Activity[];
   preview: PreviewState;
 }

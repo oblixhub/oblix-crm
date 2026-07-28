@@ -17,6 +17,7 @@ const corsHeaders = {
 };
 
 const MAX_ZIP_BYTES = 20 * 1024 * 1024;
+const UPLOAD_CONCURRENCY = 8;
 const PREVIEW_TOKEN_SECRET = (() => {
   const configured = Deno.env.get("PREVIEW_TOKEN_SECRET")?.trim();
   if (configured) {
@@ -46,6 +47,27 @@ const hasAbsoluteReferences = (rawText: string) =>
 
 const response = (body: Record<string, unknown>, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: corsHeaders });
+
+const getNamedKey = (name: "SUPABASE_PUBLISHABLE_KEYS" | "SUPABASE_SECRET_KEYS") => {
+  const raw = Deno.env.get(name);
+  if (!raw) return "";
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    return typeof parsed.default === "string" ? parsed.default : "";
+  } catch {
+    return "";
+  }
+};
+
+const getPublishableKey = () =>
+  getNamedKey("SUPABASE_PUBLISHABLE_KEYS") ||
+  Deno.env.get("SUPABASE_ANON_KEY") ||
+  "";
+
+const getSecretKey = () =>
+  getNamedKey("SUPABASE_SECRET_KEYS") ||
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ||
+  "";
 
 const previewPortalOrigin = (request: Request) => {
   const configured = Deno.env.get("PREVIEW_PORTAL_ORIGIN")?.replace(/\/$/, "");
@@ -94,6 +116,69 @@ const buildPreviewSiteUrl = (
   return `${previewContentOrigin(request)}/preview-content/${tokenPart}/${slugPart}/v${version}/`;
 };
 
+const previewStoragePrefixFromUrl = (rawUrl: unknown) => {
+  if (typeof rawUrl !== "string" || !rawUrl.trim()) return null;
+  try {
+    const parsed = new URL(rawUrl);
+    const marker = "/preview-content/";
+    const markerIndex = parsed.pathname.indexOf(marker);
+    if (markerIndex < 0) return null;
+    const parts = parsed.pathname
+      .slice(markerIndex + marker.length)
+      .split("/")
+      .filter(Boolean)
+      .map((part) => decodeURIComponent(part));
+    if (
+      parts.length < 3 ||
+      !parts[0].includes(".") ||
+      !/^v\d+$/i.test(parts[2])
+    ) {
+      return null;
+    }
+    return `${parts[0]}/${parts[1]}/${parts[2]}`;
+  } catch {
+    return null;
+  }
+};
+
+const removePaths = async (
+  admin: ReturnType<typeof createClient>,
+  bucket: string,
+  paths: string[],
+) => {
+  for (let index = 0; index < paths.length; index += 100) {
+    const chunk = paths.slice(index, index + 100);
+    if (!chunk.length) continue;
+    const { error } = await admin.storage.from(bucket).remove(chunk);
+    if (error) throw error;
+  }
+};
+
+const listFiles = async (
+  admin: ReturnType<typeof createClient>,
+  bucket: string,
+  prefix: string,
+) => {
+  const paths: string[] = [];
+  const visit = async (folder: string): Promise<void> => {
+    const { data, error } = await admin.storage.from(bucket).list(folder, {
+      limit: 1000,
+      sortBy: { column: "name", order: "asc" },
+    });
+    if (error) throw error;
+    for (const item of data) {
+      const path = folder ? `${folder}/${item.name}` : item.name;
+      if (item.metadata) {
+        paths.push(path);
+      } else {
+        await visit(path);
+      }
+    }
+  };
+  await visit(prefix);
+  return paths;
+};
+
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -115,7 +200,14 @@ Deno.serve(async (request) => {
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+    const supabaseAnonKey = getPublishableKey();
+    const supabaseSecretKey = getSecretKey();
+    if (!supabaseUrl || !supabaseAnonKey || !supabaseSecretKey) {
+      return response(
+        { error: "Configuração do Supabase indisponível para publicação." },
+        500,
+      );
+    }
 
     const userClient = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authorization } },
@@ -132,12 +224,14 @@ Deno.serve(async (request) => {
 
     const admin = createClient(
       supabaseUrl,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+      supabaseSecretKey,
     );
 
     const { data: lead, error: leadError } = await admin
       .from("leads")
-      .select("id, handle, preview_version, preview_slug")
+      .select(
+        "id, handle, preview_version, preview_slug, preview_site_url, preview_source_path",
+      )
       .eq("id", leadId)
       .maybeSingle();
 
@@ -179,7 +273,12 @@ Deno.serve(async (request) => {
       );
     }
 
-    const { entries, entrypoint, removedOuterFolder } = parsed;
+    const {
+      entries,
+      entrypoint,
+      removedOuterFolder,
+      rewrittenFiles = 0,
+    } = parsed;
     const version = (lead.preview_version ?? 0) + 1;
     const previewSlug = lead.preview_slug || toSlug(normalizeHandle(lead.handle));
 
@@ -218,45 +317,43 @@ Deno.serve(async (request) => {
       removedOuterFolder,
     });
 
-    const uploads: Promise<unknown>[] = [];
-    for (const entry of entries) {
-      const filePath = `${previewPathBase}/${encodePathForStorage(entry.path)}`;
-      uploads.push(
-        admin.storage
-          .from("preview-sites")
-          .upload(filePath, new Blob([entry.bytes]), {
-            contentType: contentTypeFor(entry.path),
-            upsert: false,
-            cacheControl: entry.path === entrypoint.path ? "no-cache" : "31536000",
-          })
-          .then((upload) => {
-            if (upload.error) {
-              throw upload.error;
-            }
-          }),
-      );
-    }
-
-    uploads.push(
-      admin.storage
-        .from("preview-sites")
-        .upload(
-          `${previewPathBase}/.oblix-preview-manifest.json`,
-          new Blob([JSON.stringify(manifest)]),
-          {
-            contentType: "application/json; charset=utf-8",
-            upsert: false,
-          },
-        )
-        .then((result) => {
-          if (result.error) throw result.error;
-        }),
-    );
-
+    const uploadedPaths: string[] = [];
     try {
-      await Promise.all(uploads);
+      for (let index = 0; index < entries.length; index += UPLOAD_CONCURRENCY) {
+        const batch = entries.slice(index, index + UPLOAD_CONCURRENCY);
+        await Promise.all(
+          batch.map(async (entry) => {
+            const filePath = `${previewPathBase}/${encodePathForStorage(entry.path)}`;
+            const upload = await admin.storage
+              .from("preview-sites")
+              .upload(filePath, new Blob([entry.bytes]), {
+                contentType: contentTypeFor(entry.path),
+                upsert: false,
+                cacheControl:
+                  entry.path === entrypoint.path ? "no-cache" : "31536000",
+              });
+            if (upload.error) throw upload.error;
+            uploadedPaths.push(filePath);
+          }),
+        );
+      }
+
+      const manifestPath = `${previewPathBase}/.oblix-preview-manifest.json`;
+      const manifestUpload = await admin.storage
+        .from("preview-sites")
+        .upload(manifestPath, new Blob([JSON.stringify(manifest)]), {
+          contentType: "application/json; charset=utf-8",
+          upsert: false,
+        });
+      if (manifestUpload.error) throw manifestUpload.error;
+      uploadedPaths.push(manifestPath);
     } catch (uploadError) {
-      console.error(uploadError);
+      await removePaths(admin, "preview-sites", uploadedPaths).catch(() => {});
+      console.error("[publish-preview] upload failed", {
+        leadId,
+        version,
+        error: uploadError instanceof Error ? uploadError.message : String(uploadError),
+      });
       return response({ error: "Falha ao salvar arquivos do preview." }, 500);
     }
 
@@ -270,7 +367,7 @@ Deno.serve(async (request) => {
       version,
     );
 
-    const { error: updateError } = await admin
+    const updateQuery = admin
       .from("leads")
       .update({
         stage: "Preview",
@@ -287,7 +384,64 @@ Deno.serve(async (request) => {
       })
       .eq("id", lead.id);
 
-    if (updateError) throw updateError;
+    const versionGuardedQuery =
+      lead.preview_version === null
+        ? updateQuery.is("preview_version", null)
+        : updateQuery.eq("preview_version", lead.preview_version);
+
+    const { data: updatedLead, error: updateError } = await versionGuardedQuery
+      .select("id")
+      .maybeSingle();
+
+    if (updateError || !updatedLead) {
+      await removePaths(admin, "preview-sites", uploadedPaths).catch(() => {});
+      if (updateError) throw updateError;
+      return response(
+        {
+          error:
+            "Este lead foi atualizado por outra pessoa. Recarregue e publique o ZIP novamente.",
+        },
+        409,
+      );
+    }
+
+    const previousPreviewPrefix = previewStoragePrefixFromUrl(
+      lead.preview_site_url,
+    );
+    const cleanupTasks: Promise<unknown>[] = [];
+    if (
+      typeof lead.preview_source_path === "string" &&
+      lead.preview_source_path &&
+      lead.preview_source_path !== sourcePath
+    ) {
+      cleanupTasks.push(
+        (async () => {
+          const { error } = await admin.storage
+            .from("preview-zips")
+            .remove([lead.preview_source_path]);
+          if (error) throw error;
+        })(),
+      );
+    }
+    if (
+      previousPreviewPrefix &&
+      previousPreviewPrefix !== previewPathBase
+    ) {
+      cleanupTasks.push(
+        listFiles(admin, "preview-sites", previousPreviewPrefix).then((paths) =>
+          removePaths(admin, "preview-sites", paths),
+        ),
+      );
+    }
+    if (cleanupTasks.length) {
+      const cleanupResults = await Promise.allSettled(cleanupTasks);
+      if (cleanupResults.some((result) => result.status === "rejected")) {
+        console.warn("[publish-preview] old preview cleanup incomplete", {
+          leadId,
+          version,
+        });
+      }
+    }
 
     return response({
       success: true,
@@ -298,6 +452,7 @@ Deno.serve(async (request) => {
       entrypoint: entrypoint.path,
       relativePaths: !hasAbsoluteReferences(new TextDecoder().decode(entrypoint.bytes)),
       hasIndex: true,
+      rewrittenFiles,
       candidates: null,
     });
   } catch (error) {

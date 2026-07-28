@@ -50,6 +50,12 @@ const normalizeHandle = (handle) => {
   return clean.replace(/^@+/, "");
 };
 
+const createNonce = () => {
+  const nonce = new Uint8Array(18);
+  crypto.getRandomValues(nonce);
+  return base64UrlEncode(nonce);
+};
+
 export const createPreviewToken = async ({
   slug,
   version,
@@ -57,6 +63,7 @@ export const createPreviewToken = async ({
   expiresAt,
   secret,
   algorithm = "hmac",
+  nonce = createNonce(),
 }) => {
   const normalizedSlug = normalizeHandle(slug);
   if (!normalizedSlug) {
@@ -66,12 +73,17 @@ export const createPreviewToken = async ({
   if (!/^v\d+$/i.test(version)) {
     throw new Error("Token de preview invalido: versao invalida.");
   }
+  const normalizedNonce = normalizeTokenInput(nonce);
+  if (!normalizedNonce) {
+    throw new Error("Token de preview invalido: nonce ausente.");
+  }
 
   const payload = {
     a: algorithm,
     s: normalizedSlug,
     v: normalizeVersion(version),
     l: leadId ? `${leadId}` : null,
+    n: normalizedNonce,
     e: Number.isFinite(expiresAt)
       ? Math.floor(expiresAt)
       : Math.floor(Date.now() / 1000 + 86400),

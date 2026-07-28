@@ -129,3 +129,64 @@ test("resolve MIME dos principais tipos de arquivo", () => {
   assert.equal(contentTypeFor("module.mjs"), "text/javascript; charset=utf-8");
   assert.equal(contentTypeFor("asset.unknown"), "application/octet-stream");
 });
+
+test("reescreve referências absolutas da raiz em HTML, CSS e JavaScript", () => {
+  const parsed = parseZipEntries({
+    zipEntries: createZipEntries([
+      [
+        "index.html",
+        '<link href="/assets/site.css"><img src="/images/foto.jpg"><script>fetch("/assets/data.json")</script>',
+      ],
+      ["styles/main.css", 'body{background:url("/images/bg.jpg")}'],
+      ["app.js", 'import config from "/assets/config.js";'],
+      ["assets/site.css", ""],
+      ["assets/data.json", "{}"],
+      ["assets/config.js", "export default {}"],
+      ["images/foto.jpg", "jpg"],
+      ["images/bg.jpg", "jpg"],
+    ]),
+  });
+
+  assert.equal(parsed.error, undefined);
+  const asText = (path) =>
+    new TextDecoder().decode(
+      parsed.entries.find((entry) => entry.path === path).bytes,
+    );
+  assert.match(asText("index.html"), /href="\.\/assets\/site\.css"/);
+  assert.match(asText("index.html"), /src="\.\/images\/foto\.jpg"/);
+  assert.match(asText("index.html"), /fetch\("\.\/assets\/data\.json"\)/);
+  assert.match(asText("styles/main.css"), /url\("\.\.\/images\/bg\.jpg"\)/);
+  assert.match(asText("app.js"), /from "\.\/assets\/config\.js"/);
+  assert.equal(parsed.rewrittenFiles, 3);
+});
+
+test("remove pasta externa também das referências internas", () => {
+  const parsed = parseZipEntries({
+    zipEntries: createZipEntries([
+      ["cliente/index.html", '<img src="/cliente/assets/logo.svg">'],
+      ["cliente/assets/logo.svg", "<svg/>"],
+    ]),
+  });
+
+  assert.equal(parsed.error, undefined);
+  const html = new TextDecoder().decode(parsed.entrypoint.bytes);
+  assert.match(html, /src="\.\/assets\/logo\.svg"/);
+});
+
+test("ignora entradas de diretório e rejeita caminhos duplicados", () => {
+  const withDirectory = parseZipEntries({
+    zipEntries: createZipEntries([
+      ["site/", ""],
+      ["site/index.html", "<html/>"],
+    ]),
+  });
+  assert.equal(withDirectory.error, undefined);
+
+  const duplicated = parseZipEntries({
+    zipEntries: createZipEntries([
+      ["index.html", "<html/>"],
+      ["INDEX.HTML", "<html/>"],
+    ]),
+  });
+  assert.match(duplicated.error, /caminhos duplicados/i);
+});

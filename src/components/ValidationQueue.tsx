@@ -112,9 +112,12 @@ export function ValidationQueue({
     });
 
     return [...pendingByBatch.keys()].sort((a, b) => {
-      const pendingDifference =
-        (pendingByBatch.get(b) ?? 0) - (pendingByBatch.get(a) ?? 0);
-      return pendingDifference || a.localeCompare(b, "pt-BR", { numeric: true });
+      const aHasPending = Number((pendingByBatch.get(a) ?? 0) > 0);
+      const bHasPending = Number((pendingByBatch.get(b) ?? 0) > 0);
+      return (
+        bHasPending - aHasPending ||
+        a.localeCompare(b, "pt-BR", { numeric: true })
+      );
     });
   }, [leads]);
   const [restoredWorkspace] = useState(loadValidationWorkspace);
@@ -197,6 +200,12 @@ export function ValidationQueue({
 
   const selectedLead =
     queue.find((lead) => lead.handle === selectedHandle) ?? queue[0] ?? null;
+
+  useEffect(() => {
+    if (selectedLead && selectedLead.handle !== selectedHandle) {
+      setSelectedHandle(selectedLead.handle);
+    }
+  }, [selectedHandle, selectedLead?.handle]);
   const completed = counts.valid + counts.discarded;
   const progress = batchLeads.length
     ? Math.round((completed / batchLeads.length) * 100)
@@ -575,7 +584,7 @@ export function ValidationQueue({
                 className="button button--secondary"
                 href={selectedLead.instagramUrl}
                 target="_blank"
-                rel="noreferrer"
+                rel="noopener noreferrer"
                 onClick={() =>
                   persistWorkspace({ selectedHandle: selectedLead.handle })
                 }

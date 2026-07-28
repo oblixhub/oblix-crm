@@ -847,7 +847,11 @@
 }
 
 .prospecting-filters {
-  grid-template-columns: 220px 200px minmax(280px, 1fr);
+  grid-template-columns:
+    minmax(180px, 0.7fr)
+    minmax(170px, 0.65fr)
+    minmax(280px, 1.45fr)
+    minmax(230px, 0.9fr);
   padding: 13px 28px;
 }
 
@@ -1841,6 +1845,86 @@
 
   .outcome-panel > header h2 {
     font-size: 24px;
+  }
+}
+
+/* Final legibility pass: green signals actions; neutral surfaces carry content. */
+.next-action-copy > span,
+.batch-stats svg,
+.validation-mode-options > button.active > span,
+.validation-mode-options > button.active em,
+.batch-progress > strong {
+  color: var(--app-green-strong);
+}
+
+.prospecting-filters .prospecting-filter-checkbox {
+  display: flex;
+  min-width: 0;
+  min-height: 46px;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.prospecting-filters .prospecting-filter-checkbox input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  margin: 0;
+  appearance: auto;
+  accent-color: var(--app-green);
+}
+
+.prospecting-filters .prospecting-filter-checkbox span {
+  color: var(--app-text);
+  font-size: 13px;
+  font-weight: 680;
+  line-height: 1.25;
+}
+
+.message-badge {
+  border-color: var(--app-border-strong);
+  background: var(--app-surface-2);
+  color: var(--app-text);
+  font-size: 11px;
+  line-height: 1.15;
+}
+
+.initial-message-toggle .button--success {
+  border-color: var(--app-green);
+  background: var(--app-surface-2);
+  color: var(--app-text);
+}
+
+.lead-card-next small,
+.profile-popover-role,
+.prospecting-queue-list time,
+.prospecting-queue-list em,
+.prospecting-queue > footer,
+.context-meta span,
+.context-contact > span,
+.context-note > span,
+.outcome-field > span,
+.context-note small {
+  font-size: 12px;
+}
+
+.context-next-action small,
+.context-next-action p,
+.context-activity article small,
+.outcome-options small,
+.validation-mode-options em,
+.batch-stats > span {
+  font-size: 12px;
+}
+
+@media (min-width: 761px) and (max-width: 1280px) {
+  .prospecting-filters {
+    grid-template-columns: minmax(170px, 0.8fr) minmax(160px, 0.75fr) minmax(260px, 1.4fr);
+  }
+
+  .prospecting-filters .prospecting-filter-checkbox {
+    grid-column: 1 / -1;
   }
 }
 

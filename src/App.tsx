@@ -18,7 +18,12 @@ import {
   type BatchValidationSettings,
 } from "./components/ValidationQueue";
 import { initialLeads, initialTemplates } from "./data";
-import { supabase, supabaseConfigured } from "./lib/supabase";
+import {
+  supabase,
+  supabaseConfigured,
+  supabasePublishableKey,
+  supabaseUrl,
+} from "./lib/supabase";
 import type {
   Activity,
   Lead,
@@ -249,6 +254,7 @@ type DbLead = {
   preview_site_url?: string | null;
   preview_source_path?: string | null;
   preview_requires_login?: boolean | null;
+  prospecting_done?: boolean | null;
   lead_batches?: {
     id: string;
     name: string;
@@ -281,6 +287,7 @@ const mapDbLead = (row: DbLead, index: number): Lead => ({
   remoteId: row.id,
   fullName: row.full_name ?? undefined,
   handle: row.handle,
+  initialMessageSent: Boolean(row.prospecting_done),
   category: row.segment ?? "A classificar",
   validationStatus: row.validation_status ?? "pending",
   validatedAt: row.validated_at ?? undefined,
@@ -349,6 +356,7 @@ const toDbPatch = (lead: Lead) => ({
   preview_slug: lead.preview.slug ?? null,
   preview_site_url: lead.preview.siteUrl ?? null,
   preview_source_path: lead.preview.sourcePath ?? null,
+  prospecting_done: lead.initialMessageSent,
   updated_at: new Date().toISOString(),
 });
 
@@ -402,6 +410,9 @@ export default function App() {
   const undoCountdownRef = useRef<number | null>(null);
   const pendingUndoRef = useRef<UndoDeleteState | null>(null);
   const previewRequiresLoginColumnSupported = useRef<boolean | null>(null);
+  const prospectingDoneColumnSupported = useRef<boolean | null>(null);
+  const leadsRef = useRef(leads);
+  const sessionUserId = session?.user.id ?? null;
 
   useEffect(() => {
     if (!supabase) return;
@@ -461,7 +472,11 @@ export default function App() {
     return () => {
       active = false;
     };
-  }, [restoredWorkspace.activeNav, session]);
+  }, [restoredWorkspace.activeNav, sessionUserId]);
+
+  useEffect(() => {
+    leadsRef.current = leads;
+  }, [leads]);
 
   const selectedLead = useMemo(
     () => leads.find((lead) => lead.id === selectedLeadId) ?? null,
@@ -696,72 +711,86 @@ export default function App() {
     setSigningOut(false);
   };
 
-  const isColumnMissingError = (message: string) =>
-    /preview_requires_login/.test(message) &&
-    /(does not exist|coluna|doesn't exist|não existe|não foi encontrada|not found|not exist)/i.test(
-      message,
+  const isColumnMissingError = (message: string, column: string) => {
+    const normalized = message.toLowerCase();
+    return (
+      normalized.includes(column) &&
+      /(does not exist|coluna|doesn't exist|não existe|não foi encontrada|not found|not exist|undefined column)/i.test(
+        message,
+      )
     );
+  };
+
+  const setInitialMessageSent = (leadId: number, initialMessageSent: boolean) => {
+    updateLead(leadId, (lead) => ({
+      ...lead,
+      initialMessageSent,
+    }));
+  };
 
   const saveLeadPatch = async (lead: Lead) => {
     if (!supabase || !session || !lead.remoteId) return;
 
     const patch = toDbPatch(lead);
+    let currentPatch: Record<string, unknown> = patch;
 
-    const { error: primaryError } = await supabase
-      .from("leads")
-      .update(patch)
-      .eq("id", lead.remoteId);
-
-    if (!primaryError) {
-      previewRequiresLoginColumnSupported.current = true;
-      return;
-    }
-
-    const primaryMessage = primaryError.message ?? "";
-
-    if (
-      previewRequiresLoginColumnSupported.current !== false &&
-      isColumnMissingError(primaryMessage)
-    ) {
-      const fallbackPatch = { ...patch } as Record<string, unknown>;
-      delete fallbackPatch.preview_requires_login;
-
-      const { error: fallbackError } = await supabase
+    while (true) {
+      const { error } = await supabase
         .from("leads")
-        .update(fallbackPatch)
+        .update(currentPatch)
         .eq("id", lead.remoteId);
 
-      if (!fallbackError) {
-        previewRequiresLoginColumnSupported.current = false;
+      if (!error) {
+        previewRequiresLoginColumnSupported.current =
+          previewRequiresLoginColumnSupported.current === false
+            ? false
+            : true;
+        prospectingDoneColumnSupported.current =
+          prospectingDoneColumnSupported.current === false ? false : true;
         return;
       }
 
-      if (isColumnMissingError(fallbackError.message ?? "")) {
+      const message = error.message ?? "";
+      let didRemoveColumn = false;
+      const fallbackPatch: Record<string, unknown> = { ...currentPatch };
+
+      if (
+        previewRequiresLoginColumnSupported.current !== false &&
+        isColumnMissingError(message, "preview_requires_login")
+      ) {
+        delete fallbackPatch.preview_requires_login;
         previewRequiresLoginColumnSupported.current = false;
+        didRemoveColumn = true;
+      }
+
+      if (
+        prospectingDoneColumnSupported.current !== false &&
+        isColumnMissingError(message, "prospecting_done")
+      ) {
+        delete fallbackPatch.prospecting_done;
+        prospectingDoneColumnSupported.current = false;
+        didRemoveColumn = true;
+      }
+
+      if (!didRemoveColumn) {
+        showToast(`Não foi possível salvar: ${message}`);
         return;
       }
 
-      showToast(`Não foi possível salvar: ${fallbackError.message}`);
-      return;
+      currentPatch = fallbackPatch;
     }
-
-    if (previewRequiresLoginColumnSupported.current === null && isColumnMissingError(primaryMessage)) {
-      previewRequiresLoginColumnSupported.current = false;
-      return;
-    }
-
-    showToast(`Não foi possível salvar: ${primaryMessage}`);
   };
 
   const updateLead = (leadId: number, updater: (lead: Lead) => Lead) => {
-    setLeads((current) => {
-      const next = current.map((lead) => (lead.id === leadId ? updater(lead) : lead));
-      const changed = next.find((lead) => lead.id === leadId);
-      if (changed) {
-        void saveLeadPatch(changed);
-      }
-      return next;
-    });
+    const current = leadsRef.current;
+    const existing = current.find((lead) => lead.id === leadId);
+    if (!existing) return;
+
+    const changed = updater(existing);
+    const next = current.map((lead) => (lead.id === leadId ? changed : lead));
+    leadsRef.current = next;
+    setLeads(next);
+    void saveLeadPatch(changed);
   };
 
   const deleteLead = async (leadId: number) => {
@@ -1050,30 +1079,49 @@ export default function App() {
       return;
     }
 
-    const { data, error } = await supabase
+    const manualPayload = {
+      handle: lead.handle,
+      full_name: lead.fullName ?? null,
+      profile_url: lead.instagramUrl,
+      segment: lead.category,
+      owner: lead.owner,
+      priority: lead.priority,
+      priority_marked:
+        lead.priority === "Urgente" || lead.priority === "Alta",
+      stage: "Validar",
+      validation_status: "pending",
+      is_validated: false,
+      site_status: "Não verificado",
+      prospecting_done: false,
+      has_instagram: true,
+      has_whatsapp: Boolean(lead.whatsappUrl),
+      whatsapp_url: lead.whatsappUrl ?? null,
+      source_name: "Cadastro manual",
+      source_type: "manual",
+      next_action: "Abrir perfil e validar",
+    };
+    let insertPayload: Record<string, unknown> = manualPayload;
+    let { data, error } = await supabase
       .from("leads")
-      .insert({
-        handle: lead.handle,
-        full_name: lead.fullName ?? null,
-        profile_url: lead.instagramUrl,
-        segment: lead.category,
-        owner: lead.owner,
-        priority: lead.priority,
-        priority_marked:
-          lead.priority === "Urgente" || lead.priority === "Alta",
-        stage: "Validar",
-        validation_status: "pending",
-        is_validated: false,
-        site_status: "Não verificado",
-        has_instagram: true,
-        has_whatsapp: Boolean(lead.whatsappUrl),
-        whatsapp_url: lead.whatsappUrl ?? null,
-        source_name: "Cadastro manual",
-        source_type: "manual",
-        next_action: "Abrir perfil e validar",
-      })
+      .insert(insertPayload)
       .select("*, lead_batches(id, name, week_start, status)")
       .single();
+    if (
+      error &&
+      isColumnMissingError(error.message ?? "", "prospecting_done") &&
+      prospectingDoneColumnSupported.current !== false
+    ) {
+      const fallbackPayload = { ...insertPayload };
+      delete fallbackPayload.prospecting_done;
+      prospectingDoneColumnSupported.current = false;
+      const fallbackResponse = await supabase
+        .from("leads")
+        .insert(fallbackPayload)
+        .select("*, lead_batches(id, name, week_start, status)")
+        .single();
+      data = fallbackResponse.data;
+      error = fallbackResponse.error;
+    }
 
     if (error || !data) {
       showToast(
@@ -1119,6 +1167,7 @@ export default function App() {
         id: Date.now() + index,
         fullName: row.fullName,
         handle: row.handle,
+        initialMessageSent: false,
         category: row.segment ?? "A classificar",
         validationStatus: "pending",
         batchName,
@@ -1222,7 +1271,7 @@ export default function App() {
       return;
     }
 
-    const rows = fresh.map((lead) => ({
+    let rows = fresh.map((lead) => ({
       handle: lead.handle,
       full_name: lead.fullName ?? null,
       profile_url: lead.profileUrl,
@@ -1245,10 +1294,29 @@ export default function App() {
       batch_id: batch.id,
     }));
 
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from("leads")
       .insert(rows)
       .select("*, lead_batches(id, name, week_start, status)");
+
+    if (
+      error &&
+      isColumnMissingError(error.message ?? "", "prospecting_done") &&
+      prospectingDoneColumnSupported.current !== false
+    ) {
+      prospectingDoneColumnSupported.current = false;
+      rows = rows.map((row) => {
+        const normalizedRow = { ...row };
+        delete (normalizedRow as { prospecting_done?: boolean }).prospecting_done;
+        return normalizedRow;
+      });
+      const retryResponse = await supabase
+        .from("leads")
+        .insert(rows)
+        .select("*, lead_batches(id, name, week_start, status)");
+      data = retryResponse.data;
+      error = retryResponse.error;
+    }
 
     if (error || !data) {
       showToast(
@@ -1297,6 +1365,7 @@ export default function App() {
     scheduleDay: WeekDay,
     dueTime: string,
     note: string,
+    initialMessageSent: boolean,
   ) => {
     const stageByOutcome: Partial<Record<ProspectingOutcome, Stage>> = {
       "Mensagem enviada": "Contatar",
@@ -1307,10 +1376,14 @@ export default function App() {
       "Já possui site": "Contatar",
     };
     const alreadyHasSite = outcome === "Já possui site";
+    const markedInitialMessageSent = Boolean(
+      initialMessageSent || outcome === "Mensagem enviada",
+    );
     updateLead(leadId, (lead) =>
       addActivity(
         {
           ...lead,
+          initialMessageSent: markedInitialMessageSent,
           stage: stageByOutcome[outcome] ?? lead.stage,
           nextAction: alreadyHasSite
             ? "Nenhuma ação necessária"
@@ -1367,10 +1440,29 @@ export default function App() {
     try {
       const { error: uploadError } = await supabase.storage
         .from("preview-zips")
-        .upload(sourcePath, file, { contentType: "application/zip", upsert: false });
+        .upload(sourcePath, file, {
+          contentType: "application/zip",
+          upsert: false,
+        });
       if (uploadError) throw uploadError;
 
-      const { data, error } = await supabase.functions.invoke<{
+      if (!supabaseUrl || !supabasePublishableKey) {
+        throw new Error("A conexão com o Supabase não está configurada.");
+      }
+
+      const publishResponse = await fetch(
+        `${supabaseUrl.replace(/\/+$/, "")}/functions/v1/publish-preview`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+            apikey: supabasePublishableKey,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ leadId: remoteId, sourcePath }),
+        },
+      );
+      const data = (await publishResponse.json().catch(() => null)) as {
         success?: boolean;
         previewUrl?: string;
         previewSlug?: string;
@@ -1378,9 +1470,18 @@ export default function App() {
         version?: number;
         hasIndex?: boolean;
         relativePaths?: boolean;
-      }>("publish-preview", { body: { leadId: remoteId, sourcePath } });
-      if (error || !data?.success || !data.previewUrl || !data.siteUrl) {
-        throw error ?? new Error("Não foi possível publicar o preview.");
+        error?: string;
+      } | null;
+      if (
+        !publishResponse.ok ||
+        !data?.success ||
+        !data.previewUrl ||
+        !data.siteUrl
+      ) {
+        throw new Error(
+          data?.error ??
+            "Não foi possível publicar o preview. Verifique o conteúdo do ZIP.",
+        );
       }
       const previewUrl = data.previewUrl;
       const siteUrl = data.siteUrl;
@@ -1391,13 +1492,13 @@ export default function App() {
             ...lead,
             stage: "Preview",
             nextAction: "Enviar acesso ao cliente",
-        preview: {
-          ...lead.preview,
-          status: "ready",
-          requiresLogin: lead.preview.requiresLogin,
-          version: data.version ?? (lead.preview.version ?? 0) + 1,
-          fileName: file.name,
-          publicUrl: previewUrl,
+            preview: {
+              ...lead.preview,
+              status: "ready",
+              requiresLogin: lead.preview.requiresLogin,
+              version: data.version ?? (lead.preview.version ?? 0) + 1,
+              fileName: file.name,
+              publicUrl: previewUrl,
               siteUrl,
               sourcePath,
               slug: data.previewSlug ?? previewUrl.split("/").pop(),
@@ -1418,44 +1519,18 @@ export default function App() {
       );
       showToast("Preview publicado. O link do cliente está pronto para enviar.");
     } catch (uploadError) {
-      const message = uploadError instanceof Error ? uploadError.message : "Não foi possível publicar este ZIP.";
+      await supabase.storage
+        .from("preview-zips")
+        .remove([sourcePath])
+        .catch(() => undefined);
+      const message =
+        uploadError instanceof Error
+          ? uploadError.message
+          : "Não foi possível publicar este ZIP.";
       showToast(message);
     } finally {
       setPublishingPreviewForId(null);
     }
-    return;
-
-    /* Local-only preview simulation kept for historical context.
-    updateLead(selectedLead.id, (lead) =>
-      addActivity(
-        {
-          ...lead,
-          stage: "Preview",
-          nextAction: "Enviar acesso ao cliente",
-          preview: {
-            ...lead.preview,
-            status: "ready",
-            version: (lead.preview.version ?? 0) + 1,
-            fileName: file.name,
-            checklist: {
-              index: true,
-              relativePaths: true,
-              protectedAccess: true,
-            },
-          },
-        },
-        {
-          kind: "preview",
-          title: "Nova versão do preview preparada",
-          detail: `${file.name} foi adicionado à demonstração local.`,
-          author: "Você",
-        },
-      ),
-    );
-    showToast("ZIP adicionado e checklist concluído na demonstração.");
-  };
-
-    */
   };
   const approvePreview = (leadId: number) => {
     updateLead(leadId, (lead) =>
@@ -1727,6 +1802,7 @@ export default function App() {
         onOpenMessages={openMessages}
         onPriorityChange={changePriority}
         onOwnerChange={changeOwner}
+        onInitialMessageSent={setInitialMessageSent}
         onSaveOutcome={saveProspectingOutcome}
       />
     );
@@ -1894,6 +1970,7 @@ function NewLeadForm({
       fullName: fullName.trim() || undefined,
       category: category.trim() || "A classificar",
       validationStatus: "pending",
+      initialMessageSent: false,
       batchName: "Cadastro manual",
       sourceType: "manual",
       owner,

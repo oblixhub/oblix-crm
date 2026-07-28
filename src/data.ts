@@ -182,6 +182,7 @@ export const initialLeads: Lead[] = Array.from({ length: 86 }, (_, index) => {
   return {
     id: index + 1,
     handle,
+    initialMessageSent: false,
     validationStatus,
     batchName: "Lote de demonstração",
     sourceType: "excel",

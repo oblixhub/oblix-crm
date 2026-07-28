@@ -1,16 +1,14 @@
 import { contentTypeFor } from "../../supabase/functions/publish-preview/engine.js";
-import { verifyPreviewToken } from "../../supabase/functions/publish-preview/token.js";
+import { parsePreviewToken } from "../../supabase/functions/publish-preview/token.js";
 
 const PREVIEW_BUCKET = process.env.PREVIEW_BUCKET || "preview-sites";
 const MAX_PATH_SEGMENTS = 60;
 const MAX_PATH_LENGTH = 3200;
 const isTokenEnforced = () => process.env.PREVIEW_REQUIRE_TOKEN !== "false";
-const getPreviewTokenSecret = () => {
-  const previewTokenSecret = process.env.PREVIEW_TOKEN_SECRET?.trim();
-  return previewTokenSecret || process.env.SUPABASE_SERVICE_ROLE_KEY || "";
-};
 const getSupabaseUrl = () => process.env.SUPABASE_URL || "";
 const getServiceRoleKey = () => process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+
+const isValidTokenFormat = (token) => looksLikeToken(token);
 
 const SECURITY_HEADERS = {
   "Referrer-Policy": "no-referrer",
@@ -36,6 +34,33 @@ const hasInvalidSegment = (segment) =>
   /[\x00-\x1f]/.test(segment);
 
 const looksLikeToken = (segment) => /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(segment);
+
+const normalizeTokenVersion = (version) =>
+  /^v\d+$/i.test(version) ? version.toLowerCase() : `v${version}`.toLowerCase();
+
+const safeDecodeURIComponent = (value) => {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return null;
+  }
+};
+
+const timingSafeStringEquals = (valueA, valueB) => {
+  if (
+    typeof valueA !== "string" ||
+    typeof valueB !== "string" ||
+    valueA.length !== valueB.length
+  ) {
+    return false;
+  }
+
+  let difference = 0;
+  for (let index = 0; index < valueA.length; index += 1) {
+    difference |= valueA.charCodeAt(index) ^ valueB.charCodeAt(index);
+  }
+  return difference === 0;
+};
 
 const parsePathParts = (normalized, hadTrailingSlash) => {
   const parts = normalized
@@ -305,6 +330,71 @@ const proxyResponse = (upstream, request, requestedPath) => {
   });
 };
 
+const parsePreviewTokenFromStoredUrl = (rawValue, { slug }) => {
+  if (typeof rawValue !== "string" || !rawValue.trim()) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(rawValue);
+    if (!parsed.pathname) return null;
+    const parts = parsed.pathname
+      .replace(/\/+$/, "")
+      .split("/")
+      .filter(Boolean)
+      .map(safeDecodeURIComponent);
+
+    if (parts.some((part) => part === null)) return null;
+    if (parts[0] !== "preview-content") return null;
+    if (parts.length < 3) return null;
+
+    // /preview-content/{token}/{slug}/vN
+    if (parts.length >= 4 && isValidTokenFormat(parts[1]) && parts[2] === slug) {
+      return {
+        token: parts[1],
+        slug: parts[2],
+        version: parts[3],
+      };
+    }
+
+    // /preview-content/{slug}/vN (legacy format)
+    if (parts.length >= 3 && parts[1] === slug && /^v\d+$/i.test(parts[2])) {
+      return {
+        token: null,
+        slug: parts[1],
+        version: parts[2],
+      };
+    }
+  } catch {
+    // ignore invalid full URL; fallback to raw string parsing
+  }
+
+  const normalized = rawValue.trim().replace(/^\//, "").replace(/\/+$/, "");
+  const relativeParts = normalized.split("/").filter(Boolean);
+  if (relativeParts.length < 3 || relativeParts[0] !== "preview-content") {
+    return null;
+  }
+  const firstPart = safeDecodeURIComponent(relativeParts[1]);
+  const secondPart = safeDecodeURIComponent(relativeParts[2]);
+  const thirdPart = safeDecodeURIComponent(relativeParts[3] ?? "");
+  if (firstPart === null || secondPart === null || thirdPart === null) {
+    return null;
+  }
+  if (isValidTokenFormat(firstPart) && secondPart === slug && /^v\d+$/i.test(thirdPart)) {
+    return { token: firstPart, slug: secondPart, version: thirdPart };
+  }
+
+  if (isValidTokenFormat(relativeParts[0])) {
+    return null;
+  }
+
+  if (secondPart === slug && /^v\d+$/i.test(thirdPart)) {
+    return { token: null, slug: secondPart, version: thirdPart };
+  }
+
+  return null;
+};
+
 const getCurrentLeadState = async ({ slug, version }) => {
   const supabaseUrl = getSupabaseUrl();
   if (!supabaseUrl) {
@@ -324,7 +414,10 @@ const getCurrentLeadState = async ({ slug, version }) => {
   }
 
   const encodedSlug = encodeURIComponent(slug);
-  const requestUrl = `${supabaseUrl.replace(/\/+$/, "")}/rest/v1/leads?select=preview_slug,preview_version&preview_slug=eq.${encodedSlug}&limit=1`;
+  const requestUrl = `${supabaseUrl.replace(
+    /\/+$/,
+    "",
+  )}/rest/v1/leads?select=id,preview_slug,preview_version,preview_site_url&preview_slug=eq.${encodedSlug}&limit=1`;
   const response = await fetch(requestUrl, {
     headers: {
       apikey: serviceRoleKey,
@@ -366,7 +459,10 @@ const getCurrentLeadState = async ({ slug, version }) => {
     return { ok: false, status: 403, reason: "Slug inválido para esta preview." };
   }
 
-  return { ok: true };
+  return {
+    ok: true,
+    lead,
+  };
 };
 
 const verifyRequestAccess = async ({ token, slug, version }) => {
@@ -375,26 +471,82 @@ const verifyRequestAccess = async ({ token, slug, version }) => {
     return { ok: false, status: 401, reason: "Token de acesso inexistente." };
   }
 
-  const result = await verifyPreviewToken({
-    token,
-    slug,
-    version,
-    secret: getPreviewTokenSecret(),
-  });
-  if (!result.ok) {
-    return { ok: false, status: 403, reason: result.reason ?? "Acesso negado." };
-  }
-
-  const versionCheck = await getCurrentLeadState({ slug, version });
-  if (!versionCheck.ok) {
+  const previewUrlState = await getCurrentLeadState({ slug, version });
+  if (!previewUrlState.ok) {
     return {
       ok: false,
-      status: versionCheck.status ?? 403,
-      reason: versionCheck.reason ?? "Acesso negado.",
+      status: previewUrlState.status ?? 403,
+      reason: previewUrlState.reason ?? "Acesso negado.",
     };
   }
 
-  return { ok: true, result };
+  const lead = previewUrlState.lead;
+  const storedPreview = parsePreviewTokenFromStoredUrl(lead.preview_site_url, {
+    slug,
+  });
+  if (!storedPreview?.token) {
+    return {
+      ok: false,
+      status: 403,
+      reason:
+        "Este preview usa uma versão antiga. Republique o ZIP para gerar um novo acesso.",
+    };
+  }
+
+  if (
+    normalizeTokenVersion(storedPreview.version) !==
+    normalizeTokenVersion(version)
+  ) {
+    return {
+      ok: false,
+      status: 403,
+      reason: "Este link pertence a outra versão do preview.",
+    };
+  }
+
+  if (!timingSafeStringEquals(storedPreview.token, token)) {
+    return {
+      ok: false,
+      status: 403,
+      reason: "Token inválido, revogado ou de outra publicação.",
+    };
+  }
+
+  const parsedToken = parsePreviewToken(token);
+  if (!parsedToken?.payload) {
+    return { ok: false, status: 403, reason: "Token mal formatado." };
+  }
+
+  const payload = parsedToken.payload;
+  if (
+    payload.a !== "hmac" ||
+    payload.s !== slug.replace(/^@+/, "").toLowerCase()
+  ) {
+    return { ok: false, status: 403, reason: "Token inválido para este lead." };
+  }
+  if (normalizeTokenVersion(payload.v) !== normalizeTokenVersion(version)) {
+    return { ok: false, status: 403, reason: "Token inválido para esta versão." };
+  }
+  if (!Number.isFinite(payload.e) || payload.e < Math.floor(Date.now() / 1000)) {
+    return { ok: false, status: 403, reason: "Token expirado." };
+  }
+  if (!payload.l || !lead?.id || `${payload.l}` !== `${lead.id}`) {
+    return {
+      ok: false,
+      status: 403,
+      reason: "Token incompatível com este lead.",
+    };
+  }
+
+  return {
+    ok: true,
+    result: {
+      leadId: payload.l,
+      slug: payload.s,
+      version: payload.v,
+      expiresAt: payload.e,
+    },
+  };
 };
 
 const createHandler = () => async (request) => {

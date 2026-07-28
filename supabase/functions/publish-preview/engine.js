@@ -7,6 +7,8 @@ const TOTAL_UNCOMPRESSED_BYTES_LIMIT = 60 * 1024 * 1024;
 const FILE_SIZE_LIMIT = 16 * 1024 * 1024;
 const MAX_PATH_DEPTH = 24;
 const MAX_PATH_LENGTH = 3200;
+const textDecoder = new TextDecoder();
+const textEncoder = new TextEncoder();
 
 const INDEX_BY_MIME = {
   ".html": "text/html; charset=utf-8",
@@ -125,6 +127,12 @@ export const decodeAndValidatePath = (rawPath) => {
 export const isHtmlFile = (path) =>
   HTML_EXTENSIONS.some((ext) => path.toLowerCase().endsWith(ext));
 
+const isCssFile = (path) => path.toLowerCase().endsWith(".css");
+const isJavaScriptFile = (path) =>
+  [".js", ".mjs", ".cjs"].some((extension) =>
+    path.toLowerCase().endsWith(extension),
+  );
+
 export const contentTypeFor = (path) => {
   const lower = path.toLowerCase();
   const known = Object.keys(INDEX_BY_MIME).find((ext) => lower.endsWith(ext));
@@ -158,6 +166,179 @@ export const stripSingleOuterFolder = (entries) => {
       ...entry,
       path: entry.path.startsWith(prefix) ? entry.path.slice(prefix.length) : entry.path,
     })),
+  };
+};
+
+const relativeRootFor = (path) => {
+  const depth = Math.max(0, path.split("/").length - 1);
+  return depth === 0 ? "./" : "../".repeat(depth);
+};
+
+const rewriteLocalReference = (
+  rawValue,
+  { rootPrefix, removedOuterFolder = null },
+) => {
+  if (typeof rawValue !== "string" || !rawValue) return rawValue;
+
+  const value = rawValue.trim();
+  if (
+    !value ||
+    value.startsWith("#") ||
+    value.startsWith("//") ||
+    value.startsWith("{{") ||
+    /^(?:[a-z][a-z0-9+.-]*:|data:)/i.test(value)
+  ) {
+    return rawValue;
+  }
+
+  const outerPrefix = removedOuterFolder
+    ? `${removedOuterFolder.replace(/\/+$/, "")}/`
+    : null;
+  let normalized = value;
+  let shouldAnchorToRoot = false;
+
+  if (normalized.startsWith("/")) {
+    normalized = normalized.replace(/^\/+/, "");
+    shouldAnchorToRoot = true;
+  }
+
+  if (outerPrefix) {
+    if (normalized.startsWith(`./${outerPrefix}`)) {
+      normalized = normalized.slice(outerPrefix.length + 2);
+      shouldAnchorToRoot = true;
+    } else if (normalized.startsWith(outerPrefix)) {
+      normalized = normalized.slice(outerPrefix.length);
+      shouldAnchorToRoot = true;
+    }
+  }
+
+  if (!shouldAnchorToRoot) return rawValue;
+  return `${rootPrefix}${normalized}`;
+};
+
+const rewriteHtml = (source, context) => {
+  let rewritten = source.replace(
+    /(\b(?:src|href|action|poster|data-src|data-href)\s*=\s*)(["'])([^"']*)\2/gi,
+    (match, attribute, quote, value) => {
+      const next = rewriteLocalReference(value, context);
+      return next === value
+        ? match
+        : `${attribute}${quote}${next}${quote}`;
+    },
+  );
+
+  rewritten = rewritten.replace(
+    /(\bsrcset\s*=\s*)(["'])([^"']*)\2/gi,
+    (match, attribute, quote, value) => {
+      const next = value
+        .split(",")
+        .map((candidate) => {
+          const trimmed = candidate.trim();
+          if (!trimmed) return candidate;
+          const [url, ...descriptor] = trimmed.split(/\s+/);
+          const rewrittenUrl = rewriteLocalReference(url, context);
+          return [rewrittenUrl, ...descriptor].join(" ");
+        })
+        .join(", ");
+      return next === value
+        ? match
+        : `${attribute}${quote}${next}${quote}`;
+    },
+  );
+
+  return rewriteJavaScript(rewriteCss(rewritten, context), context);
+};
+
+const rewriteCss = (source, context) =>
+  source
+    .replace(
+      /url\(\s*(["']?)([^)"']+)\1\s*\)/gi,
+      (match, quote, value) => {
+        const next = rewriteLocalReference(value, context);
+        return next === value ? match : `url(${quote}${next}${quote})`;
+      },
+    )
+    .replace(
+      /(@import\s+)(["'])([^"']+)\2/gi,
+      (match, prefix, quote, value) => {
+        const next = rewriteLocalReference(value, context);
+        return next === value
+          ? match
+          : `${prefix}${quote}${next}${quote}`;
+      },
+    );
+
+const rewriteJavaScript = (source, context) => {
+  const rewriteCall = (
+    match,
+    prefix,
+    quote,
+    value,
+    suffix = "",
+  ) => {
+    const next = rewriteLocalReference(value, context);
+    return next === value
+      ? match
+      : `${prefix}${quote}${next}${quote}${suffix}`;
+  };
+
+  return source
+    .replace(
+      /(\b(?:fetch|importScripts|import)\(\s*)(["'])([^"']+)\2(\s*\))/g,
+      rewriteCall,
+    )
+    .replace(
+      /(\b(?:from|import)\s+)(["'])([^"']+)\2/g,
+      (match, prefix, quote, value) =>
+        rewriteCall(match, prefix, quote, value),
+    )
+    .replace(
+      /(["'])(\/(?:assets|images|img|css|js|fonts|uploads|_ds)\/[^"']*)\1/g,
+      (match, quote, value) => {
+        const next = rewriteLocalReference(value, context);
+        return next === value ? match : `${quote}${next}${quote}`;
+      },
+    );
+};
+
+export const rewritePreviewEntries = ({
+  entries,
+  removedOuterFolder = null,
+}) => {
+  let rewrittenFiles = 0;
+  const rewrittenEntries = entries.map((entry) => {
+    if (
+      !isHtmlFile(entry.path) &&
+      !isCssFile(entry.path) &&
+      !isJavaScriptFile(entry.path)
+    ) {
+      return entry;
+    }
+
+    const source = textDecoder.decode(entry.bytes);
+    const context = {
+      rootPrefix: relativeRootFor(entry.path),
+      removedOuterFolder,
+    };
+    const rewritten = isHtmlFile(entry.path)
+      ? rewriteHtml(source, context)
+      : isCssFile(entry.path)
+        ? rewriteCss(source, context)
+        : rewriteJavaScript(source, context);
+
+    if (rewritten === source) return entry;
+    rewrittenFiles += 1;
+    const bytes = textEncoder.encode(rewritten);
+    return {
+      ...entry,
+      bytes,
+      size: bytes.byteLength,
+    };
+  });
+
+  return {
+    entries: rewrittenEntries,
+    rewrittenFiles,
   };
 };
 
@@ -204,6 +385,7 @@ export const chooseEntrypoint = (entries) => {
 
 export const parseZipEntries = ({ zipEntries }) => {
   const entries = [];
+  const normalizedPaths = new Set();
   let totalBytes = 0;
 
   for (const [rawPath, bytes] of Object.entries(zipEntries)) {
@@ -211,6 +393,7 @@ export const parseZipEntries = ({ zipEntries }) => {
     // Mantem arquivos vazios: podem existir e precisam ser preservados em alguns builds.
 
     if (isKnownSystemPath(rawPath)) continue;
+    if (rawPath.endsWith("/")) continue;
 
     const normalized = decodeAndValidatePath(rawPath);
     if (!normalized.ok) {
@@ -218,8 +401,11 @@ export const parseZipEntries = ({ zipEntries }) => {
     }
 
     const safePath = normalized.path;
-    if (safePath.endsWith("/")) continue;
     if (safePath === ".DS_Store") continue;
+    if (normalizedPaths.has(safePath.toLowerCase())) {
+      return { error: `O ZIP possui caminhos duplicados: ${safePath}` };
+    }
+    normalizedPaths.add(safePath.toLowerCase());
 
     if (bytes.byteLength > FILE_SIZE_LIMIT) {
       return { error: `Arquivo muito grande: ${safePath}` };
@@ -243,7 +429,11 @@ export const parseZipEntries = ({ zipEntries }) => {
   if (!entries.length) return { error: "O ZIP nao possui arquivos de site para publicar." };
 
   const stripped = stripSingleOuterFolder(entries);
-  const entrypointSelection = chooseEntrypoint(stripped.entries);
+  const rewritten = rewritePreviewEntries({
+    entries: stripped.entries,
+    removedOuterFolder: stripped.removedOuterFolder,
+  });
+  const entrypointSelection = chooseEntrypoint(rewritten.entries);
 
   if (entrypointSelection.error) {
     return {
@@ -253,10 +443,11 @@ export const parseZipEntries = ({ zipEntries }) => {
   }
 
   return {
-    entries: stripped.entries,
+    entries: rewritten.entries,
     entrypoint: entrypointSelection.entrypoint,
     totalBytes,
     removedOuterFolder: stripped.removedOuterFolder ?? null,
+    rewrittenFiles: rewritten.rewrittenFiles,
   };
 };
 

@@ -49,8 +49,12 @@ const mockFetchWithManifest = (token = "") => {
     if (pathname.includes("/rest/v1/leads")) {
       const leadRows = [
         {
+          id: leadId,
           preview_slug: slug,
           preview_version: 1,
+          preview_site_url: token
+            ? `https://sites.oblixhub.com/preview-content/${encodeURIComponent(token)}/${slug}/v1/`
+            : null,
         },
       ];
       return new Response(JSON.stringify(leadRows), {
@@ -138,8 +142,12 @@ const mockFetchWithCustomLeadState = ({
     if (requestUrl.pathname.includes("/rest/v1/leads")) {
       const leadRows = [
         {
+          id: leadId,
           preview_slug: leadSlug,
           preview_version: leadVersion,
+          preview_site_url: token
+            ? `https://sites.oblixhub.com/preview-content/${encodeURIComponent(token)}/${leadSlug}/v${leadVersion}/`
+            : null,
         },
       ];
       return new Response(JSON.stringify(leadRows), {
@@ -149,6 +157,39 @@ const mockFetchWithCustomLeadState = ({
     }
     return originalFetch(url, init);
   };
+  return mocked;
+};
+
+const mockFetchWithStoredPreviewSiteToken = ({
+  leadVersion = 1,
+  leadSlug = slug,
+  token,
+  leadIdValue = leadId,
+}) => {
+  const mocked = mockFetchWithManifest(token);
+  const originalFetch = global.fetch;
+  const encodedToken = encodeURIComponent(token || "");
+  const storagePath = `preview-content/${encodedToken}/${leadSlug}/v${leadVersion}/`;
+
+  global.fetch = async (url, init = {}) => {
+    const requestUrl = new URL(url, "https://xxvjmxjbqhbkesjcrudb.supabase.co");
+    if (requestUrl.pathname.includes("/rest/v1/leads")) {
+      const leadRows = [
+        {
+          id: leadIdValue,
+          preview_slug: leadSlug,
+          preview_version: leadVersion,
+          preview_site_url: `https://sites.oblixhub.com/${storagePath}`,
+        },
+      ];
+      return new Response(JSON.stringify(leadRows), {
+        status: 200,
+        headers: { "Content-Type": "application/json; charset=utf-8" },
+      });
+    }
+    return originalFetch(url, init);
+  };
+
   return mocked;
 };
 
@@ -351,7 +392,7 @@ test("token de outra versao nao acessa esta rota (403)", async () => {
   );
   assert.equal(response.status, 403);
   const body = await response.json();
-  assert.equal(body.error, "Token invalido para esta versao.");
+  assert.equal(body.error, "Token inválido para esta versão.");
 });
 
 test("token do slug diferente nao acessa (403)", async () => {
@@ -373,7 +414,92 @@ test("token do slug diferente nao acessa (403)", async () => {
   );
   assert.equal(response.status, 403);
   const body = await response.json();
-  assert.equal(body.error, "Token invalido para este lead.");
+  assert.equal(body.error, "Token inválido para este lead.");
+});
+
+test("aceita token legado persistido no banco quando segredos de assinatura mudaram", async () => {
+  process.env.SUPABASE_URL = previewOrigin;
+  process.env.PREVIEW_TOKEN_SECRET = "nova-chave";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "nova-chave";
+
+  const legacyToken = await createPreviewToken({
+    slug,
+    version,
+    leadId,
+    secret: "chave-legado-do-supabase",
+    expiresAt: Math.floor(Date.now() / 1000) + 1200,
+  });
+  mockFetchWithStoredPreviewSiteToken({
+    token: legacyToken,
+    leadVersion: 1,
+    leadSlug: slug,
+  });
+  const response = await GET(
+    new Request(
+      `https://sites.oblixhub.com/preview-content/${encodeURIComponent(legacyToken)}/catty/v1/`,
+    ),
+  );
+  assert.equal(response.status, 200);
+});
+
+test("bloqueia token que não é mais o token atual salvo no lead", async () => {
+  process.env.SUPABASE_URL = previewOrigin;
+  process.env.SUPABASE_SERVICE_ROLE_KEY = serviceRoleKey;
+  const oldToken = await createPreviewToken({
+    slug,
+    version,
+    leadId,
+    secret,
+    expiresAt: Math.floor(Date.now() / 1000) + 1200,
+  });
+  const currentToken = await createPreviewToken({
+    slug,
+    version,
+    leadId,
+    secret,
+    expiresAt: Math.floor(Date.now() / 1000) + 1200,
+  });
+  mockFetchWithStoredPreviewSiteToken({
+    token: currentToken,
+    leadVersion: 1,
+    leadSlug: slug,
+  });
+  const response = await GET(
+    new Request(
+      `https://sites.oblixhub.com/preview-content/${encodeURIComponent(oldToken)}/catty/v1/`,
+    ),
+  );
+  assert.equal(response.status, 403);
+  const body = await response.json();
+  assert.equal(body.error, "Token inválido, revogado ou de outra publicação.");
+});
+
+test("lead antigo sem URL protegida pede republicação", async () => {
+  process.env.SUPABASE_URL = previewOrigin;
+  process.env.SUPABASE_SERVICE_ROLE_KEY = serviceRoleKey;
+  const token = await createPreviewToken({
+    slug,
+    version,
+    leadId,
+    secret,
+    expiresAt: Math.floor(Date.now() / 1000) + 1200,
+  });
+  mockFetchWithCustomLeadState({
+    leadVersion: 1,
+    leadSlug: slug,
+    token: "",
+  });
+  const response = await GET(
+    new Request(
+      `https://sites.oblixhub.com/preview-content/${encodeURIComponent(token)}/catty/v1/`,
+    ),
+  );
+  assert.equal(response.status, 403);
+  const body = await response.json();
+  assert.equal(
+    body.error,
+    "Este preview usa uma versão antiga. Republique o ZIP para gerar um novo acesso.",
+  );
 });
 
 test("acesso inexistente retorna 404 para arquivo nao listado no manifest", async () => {

@@ -101,7 +101,9 @@ type ProspectingWorkspace = {
   ownerView?: Owner | "Todos";
   batch?: string;
   priority?: Priority | "Todas";
+  onlyUncontacted?: boolean;
   selectedHandle?: string | null;
+  query?: string;
 };
 
 const loadProspectingWorkspace = (): ProspectingWorkspace => {
@@ -123,6 +125,7 @@ interface ProspectingBoardProps {
   onOpenMessages: (id: number) => void;
   onPriorityChange: (id: number, priority: Priority) => void;
   onOwnerChange: (id: number, owner: Owner) => void;
+  onInitialMessageSent: (id: number, sent: boolean) => void;
   onSaveOutcome: (
     id: number,
     outcome: ProspectingOutcome,
@@ -130,6 +133,7 @@ interface ProspectingBoardProps {
     day: WeekDay,
     time: string,
     note: string,
+    initialMessageSent: boolean,
   ) => void;
 }
 
@@ -139,13 +143,14 @@ export function ProspectingBoard({
   onOpenMessages,
   onPriorityChange,
   onOwnerChange,
+  onInitialMessageSent,
   onSaveOutcome,
 }: ProspectingBoardProps) {
   const [restoredWorkspace] = useState(loadProspectingWorkspace);
   const [ownerView, setOwnerView] = useState<Owner | "Todos">(
     () => restoredWorkspace.ownerView ?? "Todos",
   );
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(() => restoredWorkspace.query ?? "");
   const [priority, setPriority] = useState<Priority | "Todas">(
     () => restoredWorkspace.priority ?? "Todas",
   );
@@ -155,12 +160,16 @@ export function ProspectingBoard({
   const [selectedHandle, setSelectedHandle] = useState<string | null>(
     () => restoredWorkspace.selectedHandle ?? null,
   );
+  const [onlyUncontacted, setOnlyUncontacted] = useState(
+    () => restoredWorkspace.onlyUncontacted ?? false,
+  );
   const [selectedOutcome, setSelectedOutcome] =
     useState<ProspectingOutcome>("Mensagem enviada");
   const [nextAction, setNextAction] = useState("Enviar mensagem de follow-up");
   const [scheduleDay, setScheduleDay] = useState<WeekDay>("Ter");
   const [time, setTime] = useState("10:00");
   const [note, setNote] = useState("");
+  const [initialMessageSent, setInitialMessageSent] = useState(false);
   const batches = useMemo(() => getBatchNames(leads), [leads]);
   const dailyTarget = 20;
   const completedToday = useMemo(
@@ -183,12 +192,26 @@ export function ProspectingBoard({
     try {
       window.sessionStorage.setItem(
         PROSPECTING_WORKSPACE_STORAGE_KEY,
-        JSON.stringify({ ownerView, batch, priority, selectedHandle }),
+        JSON.stringify({
+          ownerView,
+          batch,
+          priority,
+          selectedHandle,
+          onlyUncontacted,
+          query,
+        }),
       );
     } catch {
       // The board remains usable if browser storage is unavailable.
     }
-  }, [batch, ownerView, priority, selectedHandle]);
+  }, [
+    batch,
+    ownerView,
+    priority,
+    selectedHandle,
+    onlyUncontacted,
+    query,
+  ]);
 
   useEffect(() => {
     if (batch !== ALL_BATCHES && !batches.includes(batch)) {
@@ -207,6 +230,7 @@ export function ProspectingBoard({
           (ownerView === "Todos" || lead.owner === ownerView) &&
           matchesBatch(lead, batch) &&
           (priority === "Todas" || lead.priority === priority) &&
+          (!onlyUncontacted || !lead.initialMessageSent) &&
           (!normalized ||
             lead.handle.toLowerCase().includes(normalized) ||
             lead.category.toLowerCase().includes(normalized)),
@@ -217,7 +241,7 @@ export function ProspectingBoard({
           priorityWeight[a.priority] - priorityWeight[b.priority] ||
           a.dueTime.localeCompare(b.dueTime),
       );
-  }, [batch, leads, ownerView, priority, query]);
+  }, [batch, leads, ownerView, priority, query, onlyUncontacted]);
 
   const activeHandle =
     selectedHandle && queue.some((lead) => lead.handle === selectedHandle)
@@ -227,6 +251,20 @@ export function ProspectingBoard({
   const selectedIndex = queue.findIndex(
     (lead) => lead.handle === activeHandle,
   );
+
+  useEffect(() => {
+    if (selectedLead && selectedLead.handle !== selectedHandle) {
+      setSelectedHandle(selectedLead.handle);
+    }
+  }, [selectedHandle, selectedLead?.handle]);
+
+  useEffect(() => {
+    if (!selectedLead) {
+      setInitialMessageSent(false);
+      return;
+    }
+    setInitialMessageSent(selectedLead.initialMessageSent);
+  }, [selectedLead?.id, selectedLead?.initialMessageSent]);
 
   const moveSelection = useCallback(
     (direction: -1 | 1) => {
@@ -263,6 +301,7 @@ export function ProspectingBoard({
       scheduleDay,
       time,
       note,
+      initialMessageSent || selectedOutcome === "Mensagem enviada",
     );
     const nextLead = queue[selectedIndex + 1] ?? queue[0];
     setSelectedHandle(nextLead?.handle ?? null);
@@ -349,6 +388,14 @@ export function ProspectingBoard({
             placeholder="Buscar por @handle ou segmento"
           />
         </label>
+        <label className="prospecting-filter-checkbox">
+          <input
+            type="checkbox"
+            checked={onlyUncontacted}
+            onChange={(event) => setOnlyUncontacted(event.target.checked)}
+          />
+          <span>Apenas nao contatados ainda</span>
+        </label>
       </div>
 
       <div className="prospecting-grid">
@@ -378,6 +425,9 @@ export function ProspectingBoard({
                     {lead.stage} · {lead.batchName}
                   </small>
                 </span>
+                {lead.initialMessageSent ? (
+                  <i className="message-badge">Mensagem enviada</i>
+                ) : null}
                 {lead.overdue ? (
                   <em>Atrasado</em>
                 ) : (
@@ -454,6 +504,20 @@ export function ProspectingBoard({
               <label>
                 <span>Etapa</span>
                 <strong>{selectedLead.stage}</strong>
+              </label>
+              <label className="initial-message-toggle">
+                <span>Mensagem inicial</span>
+                <button
+                  type="button"
+                  className={`button button--quiet ${initialMessageSent ? "button--success" : ""}`}
+                  onClick={() => {
+                    const next = !initialMessageSent;
+                    setInitialMessageSent(next);
+                    onInitialMessageSent(selectedLead.id, next);
+                  }}
+                >
+                  {initialMessageSent ? "Enviada" : "Não enviada"}
+                </button>
               </label>
               <label>
                 <span>Lote</span>
