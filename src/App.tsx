@@ -1924,7 +1924,7 @@ export default function App() {
       )}
 
       {toast && (
-        <div className="toast">
+        <div className="toast" role="status" aria-live="polite">
           <div className="toast-content">
             <span>{toast}</span>
             {pendingUndo && (

@@ -1,4 +1,9 @@
-import { BadgeCheck, LockKeyhole, MessageSquareText } from "lucide-react";
+import {
+  AlertTriangle,
+  BadgeCheck,
+  LockKeyhole,
+  MessageSquareText,
+} from "lucide-react";
 import type { Lead } from "../types";
 import { resolveLeadPreviewSource } from "../lib/preview-links";
 
@@ -31,15 +36,16 @@ export function ClientPreview({
         />
       ) : (
         <div className="sample-site client-site-preview">
-          <p
-            style={{
-              margin: "0 0 14px",
-              fontWeight: 600,
-            }}
-          >
-            {preview.message ??
-              "Este lead ainda está no formato antigo. Republique o preview para gerar acesso protegido."}
-          </p>
+          <div className="client-preview-legacy-notice" role="status">
+            <AlertTriangle size={20} />
+            <div>
+              <strong>Este preview precisa ser republicado</strong>
+              <p>
+                {preview.message ??
+                  "Este lead ainda está no formato antigo. Republique o preview para gerar acesso protegido."}
+              </p>
+            </div>
+          </div>
           <nav>
             <strong>{lead.category}</strong>
             <span>Início &nbsp; Serviços &nbsp; Contato</span>
