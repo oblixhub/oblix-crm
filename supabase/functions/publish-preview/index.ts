@@ -8,6 +8,7 @@ import {
   buildPreviewManifest,
 } from "./engine.js";
 import { createPreviewToken, buildPreviewTokenConfig } from "./token.js";
+import { buildPreviewPublicSlug } from "../_shared/preview-public-slug.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -293,6 +294,7 @@ Deno.serve(async (request) => {
     } = parsed;
     const version = (lead.preview_version ?? 0) + 1;
     const previewSlug = lead.preview_slug || toSlug(normalizeHandle(lead.handle));
+    const previewPublicSlug = buildPreviewPublicSlug(previewSlug, lead.id);
 
     if (!previewSlug) {
       return response(
@@ -370,7 +372,7 @@ Deno.serve(async (request) => {
     }
 
     const previewUrl = `${previewPortalOrigin(request)}/preview/${encodeURIComponent(
-      previewSlug,
+      previewPublicSlug,
     )}`;
     const previewSiteUrl = buildPreviewSiteUrl(
       request,
@@ -459,6 +461,7 @@ Deno.serve(async (request) => {
       success: true,
       previewUrl,
       previewSlug,
+      previewPublicSlug,
       siteUrl: previewSiteUrl,
       version,
       entrypoint: entrypoint.path,

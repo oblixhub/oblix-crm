@@ -95,7 +95,7 @@ export interface PreviewState {
   siteUrl?: string;
   sourcePath?: string;
   slug?: string;
-  publicSlug: string;
+  publicSlug?: string;
   checklist: {
     index: boolean;
     relativePaths: boolean;

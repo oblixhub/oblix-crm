@@ -8,9 +8,22 @@ export interface PreviewUrlDecision {
 type PreviewSource = {
   requiresLogin?: boolean;
   slug?: string;
+  publicSlug?: string;
   siteUrl?: string;
   publicUrl?: string;
 };
+
+export const previewPublicSuffix = (leadId: string) => {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < leadId.length; index += 1) {
+    hash ^= leadId.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(36).padStart(5, "0").slice(-5);
+};
+
+export const buildPreviewPublicSlug = (previewSlug: string, leadId: string) =>
+  `${previewSlug}-${previewPublicSuffix(leadId)}`;
 
 const cleanOrigin = (value: string) => value.trim().replace(/\/$/, "");
 const isPreviewContentPath = (pathname: string) => {
@@ -70,7 +83,16 @@ export const resolveLeadPreviewSource = (
 ) => {
   const { forClient = false } = options;
 
-  if (forClient && lead?.requiresLogin) {
+  if (forClient) {
+    if (lead?.publicSlug) {
+      return {
+        url: `/preview/${encodeURIComponent(lead.publicSlug)}/`,
+        source: "publicUrl" as const,
+        valid: true,
+        message: null,
+      };
+    }
+
     const portal = normalizePreviewPortal(lead?.publicUrl ?? "");
     if (portal) {
       return {
@@ -81,14 +103,13 @@ export const resolveLeadPreviewSource = (
       };
     }
 
-    if (lead.slug) {
-      return {
-        url: `/preview/${encodeURIComponent(lead.slug)}/`,
-        source: "publicUrl" as const,
-        valid: true,
-        message: null,
-      };
-    }
+    return {
+      url: null,
+      source: null,
+      valid: false,
+      message:
+        "Este preview ainda usa um endereço antigo. Republique o ZIP para gerar o link curto.",
+    };
   }
 
   const site = normalizePreviewSource(lead?.siteUrl ?? "");

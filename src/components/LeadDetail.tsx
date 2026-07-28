@@ -12,9 +12,13 @@ import {
   FileArchive,
   Heart,
   Layers3,
+  Link2,
+  LockKeyhole,
   MessageCircle,
   Pencil,
   Send,
+  ShieldCheck,
+  UnlockKeyhole,
   UserRoundCheck,
 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -340,11 +344,20 @@ export function LeadDetail({
 
         <aside className="lead-side-panels">
           {isOwner && (
-          <section className="panel preview-panel">
-            <header className="panel-header">
-              <h2>Preview do cliente</h2>
+          <section className="panel preview-panel preview-workspace">
+            <header className="panel-header preview-workspace-header">
+              <div>
+                <h2>Publicação do site</h2>
+                <p>Envie, proteja e compartilhe o preview com o cliente.</p>
+              </div>
+              {lead.preview.status !== "none" && (
+                <span className="preview-live-badge">
+                  <span />
+                  Online
+                </span>
+              )}
             </header>
-            <label className="upload-zone">
+            <label className="upload-zone preview-dropzone">
               <input
                 type="file"
                 accept=".zip,application/zip"
@@ -358,18 +371,27 @@ export function LeadDetail({
                 }}
               />
               <CloudUpload size={31} strokeWidth={1.6} />
-              <strong>{previewPublishing ? "Publicando preview..." : "Publicar ZIP para validação"}</strong>
-              <span>O CRM valida, publica e cria o link do cliente.</span>
-              <small>ZIP de até 20 MB</small>
+              <strong>
+                {previewPublishing ? "Publicando preview..." : "Selecionar arquivo ZIP"}
+              </strong>
+              <span>O CRM valida os arquivos e publica uma nova versão.</span>
+              <small>Arquivo .zip · máximo de 20 MB</small>
             </label>
 
-            <div className="version-block">
-              <strong>Versão atual</strong>
+            <div className="version-block preview-version-card">
+              <div className="preview-section-heading">
+                <span className="preview-section-icon">
+                  <FileArchive size={18} />
+                </span>
+                <div>
+                  <strong>Versão publicada</strong>
+                  <small>O ZIP mais recente disponível para o cliente</small>
+                </div>
+              </div>
               {lead.preview.status === "none" ? (
                 <p>Nenhuma versão publicada</p>
               ) : (
                 <div className="version-file">
-                  <FileArchive size={19} />
                   <div>
                     <strong>Versão {lead.preview.version}</strong>
                     <small>{lead.preview.fileName}</small>
@@ -377,57 +399,73 @@ export function LeadDetail({
                   <span className="status-success">Pronto</span>
                 </div>
               )}
+
+              <ul className="validation-list preview-validation-list">
+                <li className={lead.preview.checklist.index ? "complete" : ""}>
+                  {lead.preview.checklist.index ? <Check size={15} /> : <Circle size={15} />}
+                  HTML encontrado
+                </li>
+                <li className={lead.preview.checklist.relativePaths ? "complete" : ""}>
+                  {lead.preview.checklist.relativePaths ? <Check size={15} /> : <Circle size={15} />}
+                  Caminhos válidos
+                </li>
+                <li className={lead.preview.checklist.protectedAccess ? "complete" : ""}>
+                  {lead.preview.checklist.protectedAccess ? <Check size={15} /> : <Circle size={15} />}
+                  Conteúdo isolado
+                </li>
+              </ul>
             </div>
 
-            <ul className="validation-list">
-              <li className={lead.preview.checklist.index ? "complete" : ""}>
-                {lead.preview.checklist.index ? <Check size={15} /> : <Circle size={15} />}
-                index.html
-              </li>
-              <li
-                className={
-                  lead.preview.checklist.relativePaths ? "complete" : ""
-                }
-              >
-                {lead.preview.checklist.relativePaths ? (
-                  <Check size={15} />
-                ) : (
-                  <Circle size={15} />
-                )}
-                Caminhos relativos
-              </li>
-              <li
-                className={
-                  lead.preview.checklist.protectedAccess ? "complete" : ""
-                }
-              >
-                {lead.preview.checklist.protectedAccess ? (
-                  <Check size={15} />
-                ) : (
-                  <Circle size={15} />
-                )}
-                Acesso protegido
-              </li>
-            </ul>
-
-            <label className="field">
-              <span>Modo de acesso do preview</span>
-              <select
-                value={lead.preview.requiresLogin ? "login" : "token"}
-                onChange={(event) =>
-                  onTogglePreviewMode(event.target.value === "login")
-                }
-                disabled={previewPublishing}
-              >
-                <option value="token">Link direto (sem login)</option>
-                <option value="login">Login + senha (Instagram)</option>
-              </select>
-              <small>
-                {lead.preview.requiresLogin
-                  ? "Cliente entra pelo link com usuário e senha."
-                  : "Cliente entra pelo link direto com token seguro."}
-              </small>
-            </label>
+            <div
+              className={`preview-access-card ${
+                lead.preview.requiresLogin ? "is-protected" : "is-direct"
+              }`}
+            >
+              <div className="preview-access-heading">
+                <span className="preview-section-icon">
+                  {lead.preview.requiresLogin ? (
+                    <LockKeyhole size={18} />
+                  ) : (
+                    <UnlockKeyhole size={18} />
+                  )}
+                </span>
+                <div>
+                  <strong>Exigir senha para abrir</strong>
+                  <small>
+                    {lead.preview.requiresLogin
+                      ? "Proteção ativada para este preview"
+                      : "O cliente acessa diretamente pelo link"}
+                  </small>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={lead.preview.requiresLogin}
+                  aria-label="Exigir senha para abrir o preview"
+                  className="preview-access-switch"
+                  disabled={previewPublishing}
+                  onClick={() =>
+                    onTogglePreviewMode(!lead.preview.requiresLogin)
+                  }
+                >
+                  <span />
+                </button>
+              </div>
+              <div className="preview-access-explanation">
+                <ShieldCheck size={16} />
+                <span>
+                  {lead.preview.requiresLogin
+                    ? `Usuário e senha: ${lead.handle}`
+                    : "O endereço curto continua exclusivo e pode receber senha depois."}
+                </span>
+              </div>
+              {lead.preview.status !== "none" && lead.preview.publicSlug && (
+                <div className="preview-short-link">
+                  <Link2 size={15} />
+                  <span>sites.oblixhub.com/preview/{lead.preview.publicSlug}</span>
+                </div>
+              )}
+            </div>
 
             {lead.preview.status !== "none" && (
               <div className="preview-link-actions">
@@ -436,6 +474,7 @@ export function LeadDetail({
                   Abrir link do cliente
                 </button>
                 <button className="button button--quiet" onClick={onCopyPreviewLink}>
+                  <Link2 size={16} />
                   Copiar link
                 </button>
                 <button

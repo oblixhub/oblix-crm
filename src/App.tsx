@@ -12,7 +12,11 @@ import { AppShell } from "./components/AppShell";
 import { Brand } from "./components/Brand";
 import { ClientPreview } from "./components/ClientPreview";
 import { Dashboard } from "./components/Dashboard";
-import { resolveLeadPreviewSource } from "./lib/preview-links";
+import {
+  buildPreviewPublicSlug,
+  getPreviewPublicAppOrigin,
+  resolveLeadPreviewSource,
+} from "./lib/preview-links";
 import { MessageLibrary } from "./components/MessageLibrary";
 import { Modal } from "./components/Modal";
 import type { BatchValidationSettings } from "./components/ValidationQueue";
@@ -605,7 +609,10 @@ const mapDbLead = (
     siteUrl: row.preview_site_url ?? undefined,
     sourcePath: row.preview_source_path ?? undefined,
     slug: row.preview_slug ?? undefined,
-    publicSlug: row.handle.replace(/^@/, ""),
+    publicSlug:
+      row.preview_slug && row.preview_site_url
+        ? buildPreviewPublicSlug(row.preview_slug, row.id)
+        : undefined,
     checklist: {
       index: Boolean(row.preview_url),
       relativePaths: Boolean(row.preview_url),
@@ -2341,6 +2348,7 @@ export default function App() {
         success?: boolean;
         previewUrl?: string;
         previewSlug?: string;
+        previewPublicSlug?: string;
         siteUrl?: string;
         version?: number;
         hasIndex?: boolean;
@@ -2377,6 +2385,9 @@ export default function App() {
               siteUrl,
               sourcePath,
               slug: data.previewSlug ?? previewUrl.split("/").pop(),
+              publicSlug:
+                data.previewPublicSlug ??
+                previewUrl.split("/").filter(Boolean).pop(),
               checklist: {
                 index: Boolean(data.hasIndex),
                 relativePaths: Boolean(data.relativePaths),
@@ -2511,8 +2522,12 @@ export default function App() {
       );
       return;
     }
+    const publicUrl = new URL(
+      previewSource.url,
+      getPreviewPublicAppOrigin() || window.location.origin,
+    ).toString();
     void navigator.clipboard
-      .writeText(previewSource.url)
+      .writeText(publicUrl)
       .then(() => showToast("Link do cliente copiado."))
       .catch(() => showToast("Não foi possível copiar automaticamente. Abra o link para copiar."));
   };
@@ -3002,7 +3017,7 @@ export default function App() {
       <PreviewHub
         leads={leads.filter((lead) => lead.validationStatus === "valid")}
         onSelectLead={selectLead}
-        onOpenClientPreview={openClientPreview}
+        onOpenClientPreview={openClientSharePreview}
       />
     );
   } else if (activeNav === "messages") {

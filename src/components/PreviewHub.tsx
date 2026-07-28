@@ -81,8 +81,9 @@ export function PreviewHub({
                 {lead.batchName}
               </small>
               <span>
-                {lead.preview.publicUrl ??
-                  `sites.oblixhub.com/${lead.preview.publicSlug}`}
+                {lead.preview.publicSlug
+                  ? `sites.oblixhub.com/preview/${lead.preview.publicSlug}`
+                  : "Republique o ZIP para gerar o link curto"}
               </span>
             </div>
             <div className="preview-list-status">

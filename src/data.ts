@@ -147,7 +147,7 @@ const makePreview = (
   version: status === "none" ? undefined : 1,
   fileName: status === "none" ? undefined : `${slug}.zip`,
   requiresLogin: false,
-  publicSlug: slug,
+  publicSlug: status === "none" ? undefined : `${slug}-d3m0o`,
   checklist: {
     index: status !== "none",
     relativePaths: status !== "none",
