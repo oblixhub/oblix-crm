@@ -18,15 +18,17 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ALL_BATCHES, getBatchNames, matchesBatch } from "../lib/leads";
-import { ownerLabels, owners } from "../types";
+import { ownerLabels } from "../types";
 import type {
   Lead,
+  LeadTag,
   Owner,
   Priority,
   ProspectingOutcome,
   WeekDay,
 } from "../types";
 import { ContactActions } from "./ContactActions";
+import { TagEditor } from "./TagEditor";
 import { WhatsAppEditor } from "./WhatsAppEditor";
 
 const outcomes: Array<{
@@ -78,6 +80,13 @@ const outcomes: Array<{
     icon: Globe2,
     tone: "gray",
   },
+  {
+    value: "Não contatar",
+    label: "Não contatar",
+    description: "Bloquear novas abordagens",
+    icon: CircleX,
+    tone: "red",
+  },
 ];
 
 const nextActions = [
@@ -128,6 +137,12 @@ interface ProspectingBoardProps {
   onOwnerChange: (id: number, owner: Owner) => void;
   onInitialMessageSent: (id: number, sent: boolean) => void;
   onWhatsAppChange: (id: number, number: string | null) => void;
+  ownerOptions: Owner[];
+  dailyTarget: number;
+  availableTags: LeadTag[];
+  canCreateTags: boolean;
+  onToggleTag: (leadId: number, tag: LeadTag) => void;
+  onCreateTag: (name: string, category: string) => Promise<LeadTag | null>;
   onSaveOutcome: (
     id: number,
     outcome: ProspectingOutcome,
@@ -147,6 +162,12 @@ export function ProspectingBoard({
   onOwnerChange,
   onInitialMessageSent,
   onWhatsAppChange,
+  ownerOptions,
+  dailyTarget,
+  availableTags,
+  canCreateTags,
+  onToggleTag,
+  onCreateTag,
   onSaveOutcome,
 }: ProspectingBoardProps) {
   const [restoredWorkspace] = useState(loadProspectingWorkspace);
@@ -174,13 +195,15 @@ export function ProspectingBoard({
   const [note, setNote] = useState("");
   const [initialMessageSent, setInitialMessageSent] = useState(false);
   const batches = useMemo(() => getBatchNames(leads), [leads]);
-  const dailyTarget = 20;
   const completedToday = useMemo(
     () =>
       leads.filter((lead) =>
         lead.activities.some(
           (activity) =>
-            activity.time.startsWith("Hoje") &&
+            ((activity.occurredAt &&
+              new Date(activity.occurredAt).toDateString() ===
+                new Date().toDateString()) ||
+              activity.time.startsWith("Hoje")) &&
             outcomes.some((outcome) => outcome.value === activity.title),
         ),
       ).length,
@@ -222,6 +245,12 @@ export function ProspectingBoard({
     }
   }, [batch, batches]);
 
+  useEffect(() => {
+    if (ownerView !== "Todos" && !ownerOptions.includes(ownerView)) {
+      setOwnerView("Todos");
+    }
+  }, [ownerOptions, ownerView]);
+
   const queue = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     return leads
@@ -230,6 +259,7 @@ export function ProspectingBoard({
           ["Contatar", "Interessado", "Materiais"].includes(
             lead.stage,
           ) &&
+          !lead.doNotContact &&
           (ownerView === "Todos" || lead.owner === ownerView) &&
           matchesBatch(lead, batch) &&
           (priority === "Todas" || lead.priority === priority) &&
@@ -315,6 +345,26 @@ export function ProspectingBoard({
     setTime("10:00");
   };
 
+  const setFollowUpPreset = (offset: number | "monday") => {
+    const target = new Date();
+    if (offset === "monday") {
+      const delta = ((8 - target.getDay()) % 7) || 7;
+      target.setDate(target.getDate() + delta);
+    } else {
+      target.setDate(target.getDate() + offset);
+      if (target.getDay() === 0) target.setDate(target.getDate() + 1);
+      if (target.getDay() === 6) target.setDate(target.getDate() + 2);
+    }
+    const dayMap: Partial<Record<number, WeekDay>> = {
+      1: "Seg",
+      2: "Ter",
+      3: "Qua",
+      4: "Qui",
+      5: "Sex",
+    };
+    setScheduleDay(dayMap[target.getDay()] ?? "Seg");
+  };
+
   return (
     <div className="prospecting-workspace">
       <header className="prospecting-heading">
@@ -332,13 +382,13 @@ export function ProspectingBoard({
           <small>{dailyProgress}%</small>
         </div>
         <div className="owner-switch" aria-label="Visualização da fila">
-          {(["Todos", ...owners] as const).map((item) => (
+          {(["Todos", ...ownerOptions] as const).map((item) => (
             <button
               key={item}
               className={ownerView === item ? "active" : ""}
               onClick={() => setOwnerView(item)}
             >
-              {item === "Todos" ? "Todos" : ownerLabels[item]}
+              {item === "Todos" ? "Todos" : ownerLabels[item] ?? item}
             </button>
           ))}
         </div>
@@ -491,9 +541,9 @@ export function ProspectingBoard({
                     )
                   }
                 >
-                  {owners.map((owner) => (
+                  {ownerOptions.map((owner) => (
                     <option key={owner} value={owner}>
-                      {ownerLabels[owner]}
+                      {ownerLabels[owner] ?? owner}
                     </option>
                   ))}
                 </select>
@@ -588,6 +638,14 @@ export function ProspectingBoard({
                 onOpenMessages={() => onOpenMessages(selectedLead.id)}
               />
             </div>
+            <TagEditor
+              compact
+              selected={selectedLead.tags}
+              available={availableTags}
+              onToggle={(tag) => onToggleTag(selectedLead.id, tag)}
+              onCreate={onCreateTag}
+              canCreate={canCreateTags}
+            />
 
             <div className="context-activity">
               <header>
@@ -659,6 +717,8 @@ export function ProspectingBoard({
                       setNextAction("Encerrar lead");
                     if (outcome.value === "Já possui site")
                       setNextAction("Nenhuma ação necessária");
+                    if (outcome.value === "Não contatar")
+                      setNextAction("Nenhuma ação necessária");
                   }}
                 >
                   <i>
@@ -677,7 +737,10 @@ export function ProspectingBoard({
             <span>Próxima ação</span>
             <select
               value={nextAction}
-              disabled={selectedOutcome === "Já possui site"}
+              disabled={
+                selectedOutcome === "Já possui site" ||
+                selectedOutcome === "Não contatar"
+              }
               onChange={(event) => setNextAction(event.target.value)}
             >
               {nextActions.map((action) => (
@@ -691,7 +754,10 @@ export function ProspectingBoard({
               <span>Dia</span>
               <select
                 value={scheduleDay}
-                disabled={selectedOutcome === "Já possui site"}
+                disabled={
+                  selectedOutcome === "Já possui site" ||
+                  selectedOutcome === "Não contatar"
+                }
                 onChange={(event) =>
                   setScheduleDay(event.target.value as WeekDay)
                 }
@@ -709,10 +775,24 @@ export function ProspectingBoard({
               <input
                 type="time"
                 value={time}
-                disabled={selectedOutcome === "Já possui site"}
+                disabled={
+                  selectedOutcome === "Já possui site" ||
+                  selectedOutcome === "Não contatar"
+                }
                 onChange={(event) => setTime(event.target.value)}
               />
             </label>
+          </div>
+          <div className="follow-up-presets" aria-label="Atalhos de agenda">
+            <button type="button" onClick={() => setFollowUpPreset(1)}>
+              Amanhã
+            </button>
+            <button type="button" onClick={() => setFollowUpPreset(2)}>
+              Em 2 dias
+            </button>
+            <button type="button" onClick={() => setFollowUpPreset("monday")}>
+              Próxima segunda
+            </button>
           </div>
 
           <button

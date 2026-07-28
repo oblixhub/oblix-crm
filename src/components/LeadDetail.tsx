@@ -20,15 +20,20 @@ import {
 import { useMemo, useState } from "react";
 import {
   ownerLabels,
-  owners,
   leadSourceLabels,
   stages,
   type Activity,
+  type CommercialRecord,
   type Lead,
+  type LeadProject,
+  type LeadTag,
   type Owner,
+  type PaymentInstallment,
   type Stage,
 } from "../types";
+import { CommercialPanel } from "./CommercialPanel";
 import { ContactActions } from "./ContactActions";
+import { TagEditor } from "./TagEditor";
 import { WhatsAppEditor } from "./WhatsAppEditor";
 
 const activityIcons = {
@@ -55,9 +60,25 @@ interface LeadDetailProps {
   onOpenTeamPreview: () => void;
   onTogglePreviewMode: (requiresLogin: boolean) => void;
   onCopyPreviewLink: () => void;
-  onMarkPaid: () => void;
   onOpenMessages: () => void;
   onWhatsAppChange: (number: string | null) => void;
+  isOwner: boolean;
+  ownerOptions: Owner[];
+  availableTags: LeadTag[];
+  onToggleTag: (tag: LeadTag) => void;
+  onCreateTag: (name: string, category: string) => Promise<LeadTag | null>;
+  onContactControlChange: (
+    permission: Lead["contactPermission"],
+    doNotContact: boolean,
+  ) => void;
+  commercial?: CommercialRecord;
+  project?: LeadProject;
+  installments: PaymentInstallment[];
+  onSaveCommercial: (
+    commercial: CommercialRecord,
+    project: LeadProject,
+    installments: PaymentInstallment[],
+  ) => Promise<void>;
 }
 
 export function LeadDetail({
@@ -74,9 +95,18 @@ export function LeadDetail({
   onOpenTeamPreview,
   onTogglePreviewMode,
   onCopyPreviewLink,
-  onMarkPaid,
   onOpenMessages,
   onWhatsAppChange,
+  isOwner,
+  ownerOptions,
+  availableTags,
+  onToggleTag,
+  onCreateTag,
+  onContactControlChange,
+  commercial,
+  project,
+  installments,
+  onSaveCommercial,
 }: LeadDetailProps) {
   const [note, setNote] = useState("");
   const visibleStages: readonly Stage[] =
@@ -132,14 +162,16 @@ export function LeadDetail({
             lead={lead}
             onSave={onWhatsAppChange}
           />
-          <button
-            className="button validation-discard"
-            onClick={() => void onDeleteLead(lead.id)}
-            disabled={deletingLead}
-          >
-            <Trash2 size={17} />
-            {deletingLead ? "Excluindo..." : "Excluir lead"}
-          </button>
+          {isOwner && (
+            <button
+              className="button validation-discard"
+              onClick={() => void onDeleteLead(lead.id)}
+              disabled={deletingLead}
+            >
+              <Trash2 size={17} />
+              {deletingLead ? "Excluindo..." : "Excluir lead"}
+            </button>
+          )}
         </div>
         <label className="field compact-field">
           <span>Etapa atual</span>
@@ -157,10 +189,11 @@ export function LeadDetail({
           <select
             value={lead.owner}
             onChange={(event) => onOwnerChange(event.target.value as Owner)}
+            disabled={!isOwner}
           >
-            {owners.map((owner) => (
+            {ownerOptions.map((owner) => (
               <option key={owner} value={owner}>
-                {ownerLabels[owner]}
+                {ownerLabels[owner] ?? owner}
               </option>
             ))}
           </select>
@@ -243,9 +276,70 @@ export function LeadDetail({
               </button>
             </div>
           </div>
+          <TagEditor
+            selected={lead.tags}
+            available={availableTags}
+            onToggle={onToggleTag}
+            onCreate={onCreateTag}
+            canCreate={isOwner}
+          />
+          <section className="contact-permission-panel">
+            <header>
+              <strong>Permissão e segurança de contato</strong>
+              <small>
+                Registre quando a pessoa autorizar continuar pelo WhatsApp.
+              </small>
+            </header>
+            <div>
+              <label>
+                <span>Origem/permissão</span>
+                <select
+                  value={lead.contactPermission}
+                  onChange={(event) => {
+                    const permission = event.target
+                      .value as Lead["contactPermission"];
+                    onContactControlChange(
+                      permission,
+                      permission === "opted_out"
+                        ? true
+                        : lead.doNotContact,
+                    );
+                  }}
+                >
+                  <option value="public_contact">
+                    Contato público no Instagram
+                  </option>
+                  <option value="opted_in">
+                    Autorizou contato no WhatsApp
+                  </option>
+                  <option value="opted_out">
+                    Pediu para não receber mensagens
+                  </option>
+                </select>
+              </label>
+              <label className="do-not-contact-toggle">
+                <input
+                  type="checkbox"
+                  checked={lead.doNotContact}
+                  onChange={(event) =>
+                    onContactControlChange(
+                      event.target.checked
+                        ? "opted_out"
+                        : lead.contactPermission === "opted_out"
+                          ? "public_contact"
+                          : lead.contactPermission,
+                      event.target.checked,
+                    )
+                  }
+                />
+                Não contatar novamente
+              </label>
+            </div>
+          </section>
         </section>
 
         <aside className="lead-side-panels">
+          {isOwner && (
           <section className="panel preview-panel">
             <header className="panel-header">
               <h2>Preview do cliente</h2>
@@ -355,35 +449,18 @@ export function LeadDetail({
             )}
           </section>
 
-          <section className="panel payment-panel">
-            <header className="panel-header">
-              <h2>Pagamento</h2>
-            </header>
-            <div className="offer-row">
-              <div>
-                <span>Oferta {lead.offer.toLowerCase()}</span>
-                <small>Aprovação e pagamento são etapas separadas.</small>
-              </div>
-              <strong>R$ {lead.amount}</strong>
-            </div>
-            <span
-              className={`payment-status payment-${lead.paymentStatus
-                .toLowerCase()
-                .replace(" ", "-")}`}
-            >
-              {lead.paymentStatus}
-            </span>
-            {lead.paymentStatus === "Aguardando PIX" && (
-              <button
-                className="button button--primary button--full"
-                onClick={onMarkPaid}
-              >
-                Confirmar pagamento
-              </button>
-            )}
-          </section>
+          )}
         </aside>
       </div>
+      {isOwner && (
+        <CommercialPanel
+          lead={lead}
+          commercial={commercial}
+          project={project}
+          installments={installments}
+          onSave={onSaveCommercial}
+        />
+      )}
     </div>
   );
 }

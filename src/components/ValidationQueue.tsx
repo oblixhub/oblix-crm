@@ -17,7 +17,7 @@ import {
   UsersRound,
 } from "lucide-react";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
-import { ownerLabels, owners } from "../types";
+import { ownerLabels } from "../types";
 import type {
   Lead,
   Owner,
@@ -40,6 +40,7 @@ export interface BatchValidationSettings {
 
 interface ValidationQueueProps {
   leads: Lead[];
+  ownerOptions: Owner[];
   onValidate: (leadId: number, settings: ValidationSettings) => void;
   onValidateBatch: (
     batchName: string,
@@ -95,6 +96,7 @@ const loadValidationWorkspace = (): ValidationWorkspace => {
 
 export function ValidationQueue({
   leads,
+  ownerOptions,
   onValidate,
   onValidateBatch,
   onDiscard,
@@ -133,7 +135,9 @@ export function ValidationQueue({
     () => restoredWorkspace.selectedHandle ?? null,
   );
   const [priority, setPriority] = useState<Priority>("Normal");
-  const [owner, setOwner] = useState<Owner>("Você");
+  const [owner, setOwner] = useState<Owner>(
+    () => ownerOptions[0] ?? "Equipe",
+  );
   const [nextAction, setNextAction] = useState("Enviar mensagem inicial");
   const [day, setDay] = useState<WeekDay>("Hoje");
   const [time, setTime] = useState("10:00");
@@ -141,7 +145,9 @@ export function ValidationQueue({
   const [validationMode, setValidationMode] = useState<
     "individual" | "batch"
   >(() => restoredWorkspace.validationMode ?? "individual");
-  const [batchOwner, setBatchOwner] = useState<Owner>("Você");
+  const [batchOwner, setBatchOwner] = useState<Owner>(
+    () => ownerOptions[0] ?? "Equipe",
+  );
   const [confirmBatch, setConfirmBatch] = useState(false);
 
   const persistWorkspace = (patch: Partial<ValidationWorkspace> = {}) => {
@@ -168,6 +174,15 @@ export function ValidationQueue({
       current && batches.includes(current) ? current : batches[0],
     );
   }, [batches]);
+
+  useEffect(() => {
+    if (!ownerOptions.includes(owner)) {
+      setOwner(ownerOptions[0] ?? "Equipe");
+    }
+    if (!ownerOptions.includes(batchOwner)) {
+      setBatchOwner(ownerOptions[0] ?? "Equipe");
+    }
+  }, [batchOwner, owner, ownerOptions]);
 
   useEffect(() => {
     persistWorkspace();
@@ -467,9 +482,9 @@ export function ValidationQueue({
                     setBatchOwner(event.target.value as Owner)
                   }
                 >
-                  {owners.map((teamOwner) => (
+                  {ownerOptions.map((teamOwner) => (
                     <option key={teamOwner} value={teamOwner}>
-                      {ownerLabels[teamOwner]}
+                      {ownerLabels[teamOwner] ?? teamOwner}
                     </option>
                   ))}
                 </select>
@@ -647,9 +662,9 @@ export function ValidationQueue({
                         setOwner(event.target.value as Owner)
                       }
                     >
-                      {owners.map((teamOwner) => (
+                      {ownerOptions.map((teamOwner) => (
                         <option key={teamOwner} value={teamOwner}>
-                          {ownerLabels[teamOwner]}
+                          {ownerLabels[teamOwner] ?? teamOwner}
                         </option>
                       ))}
                     </select>

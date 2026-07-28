@@ -23,7 +23,7 @@ export function MessageLibrary({
   const [activeCategory, setActiveCategory] = useState(
     categories[0] ?? "Todas",
   );
-  const [copiedId, setCopiedId] = useState<number | null>(null);
+  const [copiedId, setCopiedId] = useState<MessageTemplate["id"] | null>(null);
   const whatsappUrl = lead.whatsappUrl || "https://web.whatsapp.com/";
 
   const copyMessage = async (template: MessageTemplate) => {

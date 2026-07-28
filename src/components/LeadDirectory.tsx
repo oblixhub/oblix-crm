@@ -4,7 +4,9 @@ import { ALL_BATCHES, getBatchNames, matchesBatch } from "../lib/leads";
 import {
   leadSourceLabels,
   type Lead,
+  type LeadTag,
   type LeadSource,
+  type Owner,
   type Priority,
   type Stage,
 } from "../types";
@@ -17,6 +19,8 @@ interface LeadDirectoryProps {
   onPriorityChange: (id: number, priority: Priority) => void;
   onDelete?: (id: number) => void | Promise<void>;
   deletingLeadId?: number | null;
+  ownerOptions: Owner[];
+  availableTags: LeadTag[];
 }
 
 export function LeadDirectory({
@@ -26,6 +30,8 @@ export function LeadDirectory({
   onPriorityChange,
   onDelete,
   deletingLeadId,
+  ownerOptions,
+  availableTags,
 }: LeadDirectoryProps) {
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
@@ -33,6 +39,11 @@ export function LeadDirectory({
   const [priority, setPriority] = useState<Priority | "Todas">("Todas");
   const [source, setSource] = useState<LeadSource | "Todas">("Todas");
   const [batch, setBatch] = useState<string>(ALL_BATCHES);
+  const [owner, setOwner] = useState<Owner | "Todos">("Todos");
+  const [tagId, setTagId] = useState("Todas");
+  const [lifecycle, setLifecycle] = useState<
+    "Ativos" | "Encerrados" | "Não contatar" | "Todos"
+  >("Ativos");
   const [visibleCount, setVisibleCount] = useState(48);
   const batches = useMemo(() => getBatchNames(leads), [leads]);
 
@@ -48,6 +59,12 @@ export function LeadDirectory({
           (stage === "Todas" || lead.stage === stage) &&
           (priority === "Todas" || lead.priority === priority) &&
           (source === "Todas" || lead.sourceType === source) &&
+          (owner === "Todos" || lead.owner === owner) &&
+          (tagId === "Todas" || lead.tags.some((tag) => tag.id === tagId)) &&
+          (lifecycle === "Todos" ||
+            (lifecycle === "Ativos" && !lead.archived && !lead.doNotContact) ||
+            (lifecycle === "Encerrados" && Boolean(lead.archived)) ||
+            (lifecycle === "Não contatar" && lead.doNotContact)) &&
           matchesBatch(lead, batch),
       )
       .sort(
@@ -55,7 +72,17 @@ export function LeadDirectory({
           Number(Boolean(b.overdue)) - Number(Boolean(a.overdue)) ||
           a.handle.localeCompare(b.handle),
       );
-  }, [batch, deferredQuery, leads, priority, source, stage]);
+  }, [
+    batch,
+    deferredQuery,
+    leads,
+    lifecycle,
+    owner,
+    priority,
+    source,
+    stage,
+    tagId,
+  ]);
 
   return (
     <div className="standard-page refined-standard-page">
@@ -87,6 +114,25 @@ export function LeadDirectory({
           Filtros
         </div>
         <select
+          aria-label="Filtrar por situação"
+          value={lifecycle}
+          onChange={(event) => {
+            setLifecycle(
+              event.target.value as
+                | "Ativos"
+                | "Encerrados"
+                | "Não contatar"
+                | "Todos",
+            );
+            setVisibleCount(48);
+          }}
+        >
+          <option>Ativos</option>
+          <option>Encerrados</option>
+          <option>Não contatar</option>
+          <option>Todos</option>
+        </select>
+        <select
           aria-label="Filtrar por lote"
           value={batch}
           onChange={(event) => {
@@ -97,6 +143,36 @@ export function LeadDirectory({
           <option>{ALL_BATCHES}</option>
           {batches.map((batchName) => (
             <option key={batchName}>{batchName}</option>
+          ))}
+        </select>
+        <select
+          aria-label="Filtrar por responsável"
+          value={owner}
+          onChange={(event) => {
+            setOwner(event.target.value as Owner | "Todos");
+            setVisibleCount(48);
+          }}
+        >
+          <option value="Todos">Todos os responsáveis</option>
+          {ownerOptions.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label="Filtrar por tag"
+          value={tagId}
+          onChange={(event) => {
+            setTagId(event.target.value);
+            setVisibleCount(48);
+          }}
+        >
+          <option value="Todas">Todas as tags</option>
+          {availableTags.map((tag) => (
+            <option key={tag.id} value={tag.id}>
+              {tag.name}
+            </option>
           ))}
         </select>
         <select

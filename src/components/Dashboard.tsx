@@ -5,10 +5,10 @@ import {
   CalendarRange,
   CheckSquare2,
   ChevronDown,
-  Clock3,
   Import,
   Layers3,
   ListFilter,
+  MessageCircleMore,
   Plus,
   Search,
   UserRoundCog,
@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { useDeferredValue, useMemo, useState } from "react";
 import { ALL_BATCHES, getBatchNames, matchesBatch } from "../lib/leads";
-import { ownerLabels, owners, type Lead, type Owner, type Priority, type Stage, type WeekDay } from "../types";
+import { ownerLabels, type Lead, type Owner, type Priority, type Stage, type WeekDay } from "../types";
 import { LeadCard, ownerName } from "./LeadCard";
 
 type DayFilter = WeekDay | "Atrasados" | "Todos";
@@ -51,6 +51,10 @@ interface DashboardProps {
   onBulkOwner: (leadIds: number[], owner: Owner) => void;
   onBulkStage: (leadIds: number[], stage: Stage) => void;
   onBulkSchedule: (leadIds: number[], day: WeekDay) => void;
+  ownerOptions: Owner[];
+  dailyTarget: number;
+  canManageSettings: boolean;
+  onDailyTargetChange: (target: number) => void;
 }
 
 export function Dashboard({
@@ -65,6 +69,10 @@ export function Dashboard({
   onBulkOwner,
   onBulkStage,
   onBulkSchedule,
+  ownerOptions,
+  dailyTarget,
+  canManageSettings,
+  onDailyTargetChange,
 }: DashboardProps) {
   const [activeDay, setActiveDay] = useState<DayFilter>("Hoje");
   const [query, setQuery] = useState("");
@@ -120,6 +128,8 @@ export function Dashboard({
       })
       .sort(
         (a, b) =>
+          Number(!["Interessado", "Materiais"].includes(a.stage)) -
+            Number(!["Interessado", "Materiais"].includes(b.stage)) ||
           Number(Boolean(b.overdue)) - Number(Boolean(a.overdue)) ||
           priorityWeight[a.priority] - priorityWeight[b.priority] ||
           a.dueTime.localeCompare(b.dueTime),
@@ -145,29 +155,34 @@ export function Dashboard({
     Number(stage !== "Todos") +
     Number(priority !== "Todas");
 
-  const team = [
-    {
-      name: "Hugo",
-      total: leads.filter((lead) => lead.owner === "Você").length,
-      today: leads.filter(
-        (lead) => lead.owner === "Você" && lead.scheduleDay === "Hoje",
-      ).length,
-    },
-    {
-      name: "Raiza",
-      total: leads.filter((lead) => lead.owner === "Sócia").length,
-      today: leads.filter(
-        (lead) => lead.owner === "Sócia" && lead.scheduleDay === "Hoje",
-      ).length,
-    },
-    {
-      name: "Equipe",
-      total: leads.filter((lead) => lead.owner === "Equipe").length,
-      today: leads.filter(
-        (lead) => lead.owner === "Equipe" && lead.scheduleDay === "Hoje",
-      ).length,
-    },
-  ];
+  const team = ownerOptions.map((name) => ({
+    name: ownerLabels[name] ?? name,
+    total: leads.filter((lead) => lead.owner === name).length,
+    today: leads.filter(
+      (lead) => lead.owner === name && lead.scheduleDay === "Hoje",
+    ).length,
+  }));
+  const repliesNow = leads.filter((lead) =>
+    ["Interessado", "Materiais"].includes(lead.stage),
+  ).length;
+  const followUpsToday = leads.filter(
+    (lead) =>
+      lead.initialMessageSent &&
+      (lead.scheduleDay === "Hoje" || lead.overdue),
+  ).length;
+  const newContactsToday = leads.filter(
+    (lead) => !lead.initialMessageSent && lead.scheduleDay === "Hoje",
+  ).length;
+  const contactsCompletedToday = leads.filter((lead) =>
+    lead.activities.some(
+      (activity) =>
+        activity.title === "Mensagem enviada" &&
+        ((activity.occurredAt &&
+          new Date(activity.occurredAt).toDateString() ===
+            new Date().toDateString()) ||
+          activity.time.startsWith("Hoje")),
+    ),
+  ).length;
 
   const clearFilters = () => {
     setQuery("");
@@ -202,6 +217,24 @@ export function Dashboard({
             Fila atual
           </span>
         </div>
+        {canManageSettings && (
+          <label className="daily-goal-control">
+            <span>Meta diária da equipe</span>
+            <input
+              type="number"
+              min="1"
+              max="200"
+              defaultValue={dailyTarget}
+              onBlur={(event) =>
+                onDailyTargetChange(Number(event.target.value))
+              }
+              onKeyDown={(event) => {
+                if (event.key === "Enter") event.currentTarget.blur();
+              }}
+              aria-label="Meta diária da equipe"
+            />
+          </label>
+        )}
         <div className="operations-heading-actions">
           <button className="button button--primary" onClick={onNewLead}>
             <Plus size={19} />
@@ -274,21 +307,21 @@ export function Dashboard({
 
       <section className="operations-summary" aria-label="Resumo operacional">
         <SummaryItem
-          icon={Clock3}
-          value={String(counts.Hoje)}
-          label="ações para hoje"
+          icon={MessageCircleMore}
+          value={String(repliesNow)}
+          label="respostas e interessados"
           tone="blue"
         />
         <SummaryItem
           icon={AlertCircle}
-          value={String(counts.Atrasados)}
-          label="atrasadas"
+          value={String(followUpsToday)}
+          label="follow-ups para fazer"
           tone="amber"
         />
         <SummaryItem
           icon={CalendarDays}
-          value={String(leads.length)}
-          label="leads ativos"
+          value={`${contactsCompletedToday}/${dailyTarget}`}
+          label={`${newContactsToday} novos disponíveis`}
           tone="purple"
         />
       </section>
@@ -362,7 +395,7 @@ export function Dashboard({
               label="Responsável"
               value={owner}
               onChange={(value) => setOwner(value as Owner | "Todos")}
-              options={["Todos", ...owners]}
+              options={["Todos", ...ownerOptions]}
               formatOption={(option) =>
                 option === "Todos" ? option : ownerLabels[option as Owner]
               }
@@ -400,10 +433,14 @@ export function Dashboard({
               <strong>{selectedIds.size}</strong> selecionados
             </span>
             <i />
-            <button onClick={() => onBulkOwner(selected, "Sócia")}>
-              <UserRoundCog size={18} />
-              Passar para Raiza
-            </button>
+            {ownerOptions
+              .filter((item) => item !== "Equipe")
+              .map((item) => (
+                <button key={item} onClick={() => onBulkOwner(selected, item)}>
+                  <UserRoundCog size={18} />
+                  Passar para {ownerLabels[item] ?? item}
+                </button>
+              ))}
             <button onClick={() => onBulkOwner(selected, "Equipe")}>
               <Layers3 size={18} />
               Deixar com a equipe
@@ -412,10 +449,28 @@ export function Dashboard({
               <ArrowRight size={18} />
               Mover para Contatar
             </button>
-            <button onClick={() => onBulkSchedule(selected, "Ter")}>
+            <label className="bulk-schedule-select">
               <CalendarDays size={18} />
-              Reagendar
-            </button>
+              <select
+                aria-label="Reagendar selecionados"
+                defaultValue=""
+                onChange={(event) => {
+                  if (!event.target.value) return;
+                  onBulkSchedule(selected, event.target.value as WeekDay);
+                  event.target.value = "";
+                }}
+              >
+                <option value="" disabled>
+                  Reagendar…
+                </option>
+                <option value="Hoje">Hoje</option>
+                <option value="Seg">Segunda</option>
+                <option value="Ter">Terça</option>
+                <option value="Qua">Quarta</option>
+                <option value="Qui">Quinta</option>
+                <option value="Sex">Sexta</option>
+              </select>
+            </label>
             <button
               className="bulk-clear"
               onClick={() => setSelectedIds(new Set())}

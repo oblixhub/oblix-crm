@@ -203,6 +203,9 @@ export const initialLeads: Lead[] = Array.from({ length: 86 }, (_, index) => {
     amount: index % 4 === 0 ? 250 : 200,
     paymentStatus:
       stage === "Aprovação" ? "Aguardando PIX" : "Não aprovado",
+    tags: [],
+    contactPermission: "public_contact",
+    doNotContact: false,
     activities: baseActivities.slice(
       0,
       Math.max(1, Math.min(baseActivities.length, stages.indexOf(stage) + 1)),

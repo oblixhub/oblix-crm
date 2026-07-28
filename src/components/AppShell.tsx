@@ -32,12 +32,6 @@ const navItems: Array<{
   { key: "messages", label: "Mensagens", icon: MessageSquareText },
 ];
 
-const mobileNavItems = navItems.filter((item) =>
-  ["dashboard", "validation", "prospecting", "leads", "previews"].includes(
-    item.key,
-  ),
-);
-
 interface AppShellProps {
   active: NavKey;
   theme: "light" | "dark";
@@ -45,6 +39,7 @@ interface AppShellProps {
   profileEmail: string;
   profileRole: string;
   signingOut: boolean;
+  isOwner: boolean;
   onNavigate: (key: NavKey) => void;
   onToggleTheme: () => void;
   onSignOut: () => void;
@@ -58,6 +53,7 @@ export function AppShell({
   profileEmail,
   profileRole,
   signingOut,
+  isOwner,
   onNavigate,
   onToggleTheme,
   onSignOut,
@@ -65,6 +61,20 @@ export function AppShell({
 }: AppShellProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const visibleNavItems = isOwner
+    ? navItems
+    : navItems.filter(
+        (item) => item.key !== "finance" && item.key !== "previews",
+      );
+  const mobileNavItems = visibleNavItems.filter((item) =>
+    isOwner
+      ? ["dashboard", "validation", "prospecting", "leads", "previews"].includes(
+          item.key,
+        )
+      : ["dashboard", "validation", "prospecting", "leads", "messages"].includes(
+          item.key,
+        ),
+  );
   const profileInitials = profileName
     .split(/\s+/)
     .filter(Boolean)
@@ -99,7 +109,7 @@ export function AppShell({
         </div>
 
         <nav className="main-nav" aria-label="Navegação principal">
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const Icon = item.icon;
             return (
               <button

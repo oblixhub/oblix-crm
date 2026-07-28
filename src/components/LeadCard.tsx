@@ -30,7 +30,7 @@ interface LeadCardProps {
 const priorities: Priority[] = ["Urgente", "Alta", "Normal", "Baixa"];
 
 export function ownerName(owner: Lead["owner"]) {
-  return ownerLabels[owner];
+  return ownerLabels[owner] ?? owner;
 }
 
 function leadInitials(handle: string) {
@@ -150,6 +150,20 @@ export function LeadCard({
         </button>
 
         <footer className="lead-card-footer" aria-label={`Ações de ${lead.handle}`}>
+        {lead.tags.length > 0 && (
+          <span className="lead-card-tags" aria-label="Tags do lead">
+            {lead.tags.slice(0, 2).map((tag) => (
+              <i
+                key={tag.id}
+                style={{ borderColor: tag.color }}
+                title={tag.name}
+              >
+                {tag.name}
+              </i>
+            ))}
+            {lead.tags.length > 2 && <i>+{lead.tags.length - 2}</i>}
+          </span>
+        )}
         <ContactActions
           lead={lead}
           compact

@@ -218,6 +218,18 @@ Deno.serve(async (request) => {
       return response({ error: "Sessão inválida. Faça login novamente." }, 401);
     }
 
+    const { data: publisherProfile, error: profileError } = await userClient
+      .from("profiles")
+      .select("role")
+      .eq("user_id", userData.user.id)
+      .maybeSingle();
+    if (profileError || publisherProfile?.role !== "owner") {
+      return response(
+        { error: "Somente os sócios podem publicar ou substituir previews." },
+        403,
+      );
+    }
+
     if (!sourcePath.startsWith(`${leadId}/source/`)) {
       return response({ error: "Arquivo não pertence ao lead selecionado." }, 400);
     }

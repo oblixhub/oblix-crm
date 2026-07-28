@@ -7,13 +7,30 @@ export type NavKey =
   | "finance"
   | "messages";
 
-export type Owner = "Você" | "Sócia" | "Equipe";
+export type Owner = string;
 export const owners: readonly Owner[] = ["Você", "Sócia", "Equipe"];
-export const ownerLabels: Record<Owner, string> = {
+export const ownerLabels: Record<string, string> = {
   "Você": "Hugo",
   "Sócia": "Raiza",
   "Equipe": "Equipe",
+  Hugo: "Hugo",
+  Raiza: "Raiza",
 };
+export const ownerLabel = (owner: Owner) => ownerLabels[owner] ?? owner;
+
+export interface TeamProfile {
+  userId: string;
+  displayName: string;
+  role: "owner" | "seller";
+}
+
+export interface LeadTag {
+  id: string;
+  name: string;
+  color: string;
+  category: string;
+  isSystem?: boolean;
+}
 export type Priority = "Urgente" | "Alta" | "Normal" | "Baixa";
 export type ValidationStatus = "pending" | "valid" | "discarded";
 export type LeadSource =
@@ -35,7 +52,8 @@ export type ProspectingOutcome =
   | "Interessado"
   | "Não interessado"
   | "Retornar depois"
-  | "Já possui site";
+  | "Já possui site"
+  | "Não contatar";
 
 export const stages = [
   "Validar",
@@ -59,12 +77,13 @@ export type ActivityKind =
   | "note";
 
 export interface Activity {
-  id: number;
+  id: number | string;
   kind: ActivityKind;
   title: string;
   detail: string;
   time: string;
   author: string;
+  occurredAt?: string;
 }
 
 export interface PreviewState {
@@ -97,6 +116,7 @@ export interface Lead {
   batchName: string;
   sourceType: LeadSource;
   owner: Owner;
+  assignedTo?: string;
   stage: Stage;
   nextAction: string;
   nextActionAt?: string;
@@ -112,6 +132,13 @@ export interface Lead {
   capturedAt?: string;
   capturedBy?: string;
   notes?: string;
+  tags: LeadTag[];
+  contactPermission: "public_contact" | "opted_in" | "opted_out";
+  doNotContact: boolean;
+  lastContactedAt?: string;
+  lastResponseAt?: string;
+  closedAt?: string;
+  closedReason?: string;
   offer: "Com domínio" | "Sem domínio";
   amount: number;
   paymentStatus: "Não aprovado" | "Aguardando PIX" | "Pago";
@@ -121,11 +148,79 @@ export interface Lead {
 }
 
 export interface MessageTemplate {
-  id: number;
+  id: number | string;
   title: string;
   category: string;
   message: string;
   favorite: boolean;
   shared: boolean;
   updatedLabel: string;
+}
+
+export interface LeadTask {
+  id: string;
+  leadId: string;
+  assignedTo?: string;
+  taskType: string;
+  title: string;
+  dueAt?: string;
+  status: "pending" | "completed" | "cancelled";
+  priority: Priority;
+}
+
+export interface CommercialRecord {
+  leadId: string;
+  offerType: string;
+  amount: number;
+  paymentMethod: string;
+  installmentsCount: number;
+  status:
+    | "Não negociado"
+    | "Negociação"
+    | "Aguardando pagamento"
+    | "Parcial"
+    | "Pago"
+    | "Atrasado"
+    | "Cancelado";
+  nextChargeAt?: string;
+  domainIncluded: boolean;
+  deliveryStatus: string;
+  privateNotes: string;
+}
+
+export interface PaymentInstallment {
+  id?: string;
+  leadId: string;
+  installmentNumber: number;
+  amount: number;
+  dueDate: string;
+  status: "Pendente" | "Pago" | "Atrasado" | "Cancelado";
+  paidAt?: string;
+}
+
+export interface LeadProject {
+  leadId: string;
+  status:
+    | "Aguardando materiais"
+    | "Materiais recebidos"
+    | "Em produção"
+    | "Revisão interna"
+    | "Preview enviado"
+    | "Ajustes solicitados"
+    | "Aprovado"
+    | "Pagamento pendente"
+    | "Pago"
+    | "Entregue";
+  materialsNotes: string;
+  revisionNotes: string;
+  deliveryNotes: string;
+  domainName?: string;
+  deliveryDueAt?: string;
+  deliveredAt?: string;
+}
+
+export interface CrmSettings {
+  dailyContactGoal: number;
+  firstFollowUpDays: number;
+  secondFollowUpDays: number;
 }

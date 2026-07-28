@@ -1,22 +1,21 @@
 ﻿import { Eye, EyeOff, FileSpreadsheet, Plus, UploadCloud } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import { AppShell } from "./components/AppShell";
 import { Brand } from "./components/Brand";
 import { ClientPreview } from "./components/ClientPreview";
 import { Dashboard } from "./components/Dashboard";
-import { FinanceView } from "./components/FinanceView";
-import { LeadDetail } from "./components/LeadDetail";
 import { resolveLeadPreviewSource } from "./lib/preview-links";
-import { LeadDirectory } from "./components/LeadDirectory";
 import { MessageLibrary } from "./components/MessageLibrary";
-import { MessageManager } from "./components/MessageManager";
 import { Modal } from "./components/Modal";
-import { PreviewHub } from "./components/PreviewHub";
-import { ProspectingBoard } from "./components/ProspectingBoard";
-import {
-  ValidationQueue,
-  type BatchValidationSettings,
-} from "./components/ValidationQueue";
+import type { BatchValidationSettings } from "./components/ValidationQueue";
 import { initialLeads, initialTemplates } from "./data";
 import {
   supabase,
@@ -26,16 +25,59 @@ import {
 } from "./lib/supabase";
 import type {
   Activity,
+  CommercialRecord,
+  CrmSettings,
   Lead,
+  LeadProject,
+  LeadTag,
+  LeadTask,
   MessageTemplate,
   NavKey,
   Owner,
+  PaymentInstallment,
   Priority,
   ProspectingOutcome,
   Stage,
+  TeamProfile,
   WeekDay,
 } from "./types";
-import { ownerLabels, owners } from "./types";
+import { ownerLabel, owners } from "./types";
+
+const FinanceView = lazy(() =>
+  import("./components/FinanceView").then((module) => ({
+    default: module.FinanceView,
+  })),
+);
+const LeadDetail = lazy(() =>
+  import("./components/LeadDetail").then((module) => ({
+    default: module.LeadDetail,
+  })),
+);
+const LeadDirectory = lazy(() =>
+  import("./components/LeadDirectory").then((module) => ({
+    default: module.LeadDirectory,
+  })),
+);
+const MessageManager = lazy(() =>
+  import("./components/MessageManager").then((module) => ({
+    default: module.MessageManager,
+  })),
+);
+const PreviewHub = lazy(() =>
+  import("./components/PreviewHub").then((module) => ({
+    default: module.PreviewHub,
+  })),
+);
+const ProspectingBoard = lazy(() =>
+  import("./components/ProspectingBoard").then((module) => ({
+    default: module.ProspectingBoard,
+  })),
+);
+const ValidationQueue = lazy(() =>
+  import("./components/ValidationQueue").then((module) => ({
+    default: module.ValidationQueue,
+  })),
+);
 
 type ModalState =
   | { type: "new-lead" }
@@ -108,6 +150,48 @@ const scheduleToIso = (day: WeekDay, time: string) => {
   }
   const [hours, minutes] = time.split(":").map(Number);
   date.setHours(hours || 0, minutes || 0, 0, 0);
+  return date.toISOString();
+};
+
+const batchSlotIso = (
+  position: number,
+  dailyCapacity: number,
+) => {
+  const safeCapacity = Math.max(1, dailyCapacity);
+  const targetBusinessDay = Math.floor(position / safeCapacity);
+  const date = new Date();
+  while (date.getDay() === 0 || date.getDay() === 6) {
+    date.setDate(date.getDate() + 1);
+  }
+  let advanced = 0;
+  while (advanced < targetBusinessDay) {
+    date.setDate(date.getDate() + 1);
+    if (date.getDay() !== 0 && date.getDay() !== 6) advanced += 1;
+  }
+  const positionInDay = position % safeCapacity;
+  const intervalMinutes = Math.max(15, Math.floor((8 * 60) / safeCapacity));
+  const totalMinutes = 9 * 60 + positionInDay * intervalMinutes;
+  date.setHours(
+    Math.floor(totalMinutes / 60),
+    totalMinutes % 60,
+    0,
+    0,
+  );
+  return date.toISOString();
+};
+
+const futureBusinessIso = (businessDays: number, time = "10:00") => {
+  const date = new Date();
+  let remaining = Math.max(0, businessDays);
+  while (remaining > 0) {
+    date.setDate(date.getDate() + 1);
+    if (date.getDay() !== 0 && date.getDay() !== 6) remaining -= 1;
+  }
+  while (date.getDay() === 0 || date.getDay() === 6) {
+    date.setDate(date.getDate() + 1);
+  }
+  const [hours, minutes] = time.split(":").map(Number);
+  date.setHours(hours || 10, minutes || 0, 0, 0);
   return date.toISOString();
 };
 
@@ -256,6 +340,14 @@ type DbLead = {
   preview_source_path?: string | null;
   preview_requires_login?: boolean | null;
   prospecting_done?: boolean | null;
+  assigned_to?: string | null;
+  archived?: boolean | null;
+  contact_permission?: "public_contact" | "opted_in" | "opted_out" | null;
+  do_not_contact?: boolean | null;
+  last_contacted_at?: string | null;
+  last_response_at?: string | null;
+  closed_at?: string | null;
+  closed_reason?: string | null;
   lead_batches?: {
     id: string;
     name: string;
@@ -265,9 +357,142 @@ type DbLead = {
 };
 
 type UserProfile = {
+  user_id?: string;
   display_name: string;
   role: "owner" | "seller";
 };
+
+type DbActivity = {
+  id: string;
+  lead_id: string;
+  actor_id: string | null;
+  activity_type: Activity["kind"];
+  title: string;
+  detail: string;
+  occurred_at: string;
+};
+
+type DbTask = {
+  id: string;
+  lead_id: string;
+  assigned_to: string | null;
+  task_type: string;
+  title: string;
+  due_at: string | null;
+  status: LeadTask["status"];
+  priority: Priority;
+};
+
+type DbTag = {
+  id: string;
+  name: string;
+  color: string;
+  category: string;
+  is_system: boolean;
+};
+
+type DbLeadTag = {
+  lead_id: string;
+  tags: DbTag | DbTag[] | null;
+};
+
+type DbMessageTemplate = {
+  id: string;
+  title: string;
+  category: string;
+  message: string;
+  favorite: boolean;
+  shared: boolean;
+  updated_at: string;
+};
+
+type DbCommercial = {
+  lead_id: string;
+  offer_type: string;
+  amount: number | string;
+  payment_method: string;
+  installments_count: number;
+  status: CommercialRecord["status"];
+  next_charge_at: string | null;
+  domain_included: boolean;
+  delivery_status: string;
+  private_notes: string;
+};
+
+type DbInstallment = {
+  id: string;
+  lead_id: string;
+  installment_number: number;
+  amount: number | string;
+  due_date: string;
+  status: PaymentInstallment["status"];
+  paid_at: string | null;
+};
+
+type DbProject = {
+  lead_id: string;
+  status: LeadProject["status"];
+  materials_notes: string;
+  revision_notes: string;
+  delivery_notes: string;
+  domain_name: string | null;
+  delivery_due_at: string | null;
+  delivered_at: string | null;
+};
+
+type LeadRelations = {
+  activities?: Activity[];
+  tags?: LeadTag[];
+  task?: LeadTask;
+  commercial?: CommercialRecord;
+  assigneeName?: string;
+};
+
+const weekDayFromDate = (date: Date): WeekDay => {
+  const day = date.getDay();
+  if (day === 1) return "Seg";
+  if (day === 2) return "Ter";
+  if (day === 3) return "Qua";
+  if (day === 4) return "Qui";
+  if (day === 5) return "Sex";
+  return "Hoje";
+};
+
+const scheduleFromIso = (value?: string | null) => {
+  if (!value) {
+    return {
+      scheduleDay: "Hoje" as WeekDay,
+      dueTime: "Sem data",
+      overdue: false,
+    };
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return {
+      scheduleDay: "Hoje" as WeekDay,
+      dueTime: "Sem data",
+      overdue: false,
+    };
+  }
+  const now = new Date();
+  const sameDay = date.toDateString() === now.toDateString();
+  return {
+    scheduleDay: sameDay ? ("Hoje" as WeekDay) : weekDayFromDate(date),
+    dueTime: new Intl.DateTimeFormat("pt-BR", {
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(date),
+    overdue: date.getTime() < now.getTime(),
+  };
+};
+
+const activityTimeLabel = (value: string) =>
+  new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
 
 const stableLeadId = (remoteId: string) => {
   const uuidPrefix = remoteId.replaceAll("-", "").slice(0, 13);
@@ -283,7 +508,26 @@ const stableLeadId = (remoteId: string) => {
   return hash >>> 0;
 };
 
-const mapDbLead = (row: DbLead, index: number): Lead => ({
+const mapDbLead = (
+  row: DbLead,
+  index: number,
+  relations: LeadRelations = {},
+): Lead => {
+  const schedule = scheduleFromIso(relations.task?.dueAt ?? row.next_action_at);
+  const fallbackActivities: Activity[] = [
+    {
+      id: index + 1,
+      kind: "validation",
+      title: "Importado do Excel",
+      detail:
+        row.professional_evidence ??
+        "Aguardando validação manual do perfil.",
+      time: "Importado",
+      author: "Sistema",
+    },
+  ];
+  const commercial = relations.commercial;
+  return {
   id: row.id ? stableLeadId(row.id) : index + 1,
   remoteId: row.id,
   fullName: row.full_name ?? undefined,
@@ -297,18 +541,21 @@ const mapDbLead = (row: DbLead, index: number): Lead => ({
   batchName:
     row.lead_batches?.name ?? (row.source_type === "manual" ? "Cadastro manual" : "Lote 1"),
   sourceType: row.source_type ?? "excel",
-  owner:
-    row.owner === "Sócia" || row.owner === "Equipe" ? row.owner : "Você",
+  owner: relations.assigneeName ?? (row.owner === "Sócia" ? "Raiza" : row.owner === "Equipe" ? "Equipe" : "Hugo"),
+  assignedTo: row.assigned_to ?? undefined,
   stage: (row.validation_status === "pending" ? "Validar" : row.stage) as Stage,
   nextAction:
+    relations.task?.title ??
     row.next_action ??
     (row.validation_status === "pending"
       ? "Abrir perfil e validar"
       : "Definir próxima ação"),
-  nextActionAt: row.next_action_at ?? undefined,
+  nextActionAt: relations.task?.dueAt ?? row.next_action_at ?? undefined,
   priority: row.priority ?? (row.priority_marked ? "Alta" : "Normal"),
-  scheduleDay: "Hoje",
-  dueTime: "A definir",
+  scheduleDay: schedule.scheduleDay,
+  dueTime: schedule.dueTime,
+  overdue: schedule.overdue,
+  archived: Boolean(row.archived),
   siteStatus: row.site_status === "Tem site" ? "Tem site" : row.site_status === "Sem site" ? "Sem site" : "Não verificado",
   instagramUrl: row.profile_url,
   whatsappUrl:
@@ -318,10 +565,33 @@ const mapDbLead = (row: DbLead, index: number): Lead => ({
     row.whatsapp_number ??
     row.whatsapp_url?.match(/(?:wa\.me\/|phone=)(\d{8,15})/i)?.[1] ??
     undefined,
-  offer: row.offer_suggestion?.toLowerCase().includes("domínio") ? "Com domínio" : "Sem domínio",
-  amount: row.offer_suggestion?.toLowerCase().includes("domínio") ? 250 : 200,
-  paymentStatus: "Não aprovado",
-  activities: [{ id: index + 1, kind: "validation", title: "Importado do Excel", detail: row.professional_evidence ?? "Aguardando validação manual do perfil.", time: "Importado agora", author: "Sistema" }],
+  offer:
+    commercial?.offerType.toLowerCase().includes("domínio") ||
+    row.offer_suggestion?.toLowerCase().includes("domínio")
+      ? "Com domínio"
+      : "Sem domínio",
+  amount:
+    commercial?.amount ??
+    (row.offer_suggestion?.toLowerCase().includes("domínio") ? 250 : 200),
+  paymentStatus:
+    commercial?.status === "Pago"
+      ? "Pago"
+      : commercial?.status === "Aguardando pagamento" ||
+          commercial?.status === "Parcial" ||
+          commercial?.status === "Atrasado"
+        ? "Aguardando PIX"
+        : "Não aprovado",
+  tags: relations.tags ?? [],
+  contactPermission: row.contact_permission ?? "public_contact",
+  doNotContact: Boolean(row.do_not_contact),
+  lastContactedAt: row.last_contacted_at ?? undefined,
+  lastResponseAt: row.last_response_at ?? undefined,
+  closedAt: row.closed_at ?? undefined,
+  closedReason: row.closed_reason ?? undefined,
+  activities:
+    relations.activities && relations.activities.length > 0
+      ? relations.activities
+      : fallbackActivities,
   preview: {
     status: row.preview_url
       ? row.stage === "Aprovação"
@@ -342,13 +612,15 @@ const mapDbLead = (row: DbLead, index: number): Lead => ({
       protectedAccess: Boolean(row.preview_url),
     },
   },
-});
+  };
+};
 
 const toDbPatch = (lead: Lead) => ({
   priority_marked: lead.priority === "Urgente" || lead.priority === "Alta",
   priority: lead.priority,
   stage: lead.stage,
   owner: lead.owner,
+  assigned_to: lead.assignedTo ?? null,
   site_status: lead.siteStatus,
   validation_status: lead.validationStatus,
   is_validated: lead.validationStatus === "valid",
@@ -366,6 +638,13 @@ const toDbPatch = (lead: Lead) => ({
   prospecting_done: lead.initialMessageSent,
   has_whatsapp: Boolean(lead.whatsappUrl),
   whatsapp_url: lead.whatsappUrl ?? null,
+  archived: Boolean(lead.archived),
+  contact_permission: lead.contactPermission,
+  do_not_contact: lead.doNotContact,
+  last_contacted_at: lead.lastContactedAt ?? null,
+  last_response_at: lead.lastResponseAt ?? null,
+  closed_at: lead.closedAt ?? null,
+  closed_reason: lead.closedReason ?? null,
   updated_at: new Date().toISOString(),
 });
 
@@ -392,6 +671,19 @@ export default function App() {
   const [authReady, setAuthReady] = useState(!supabaseConfigured);
   const [session, setSession] = useState<Awaited<ReturnType<NonNullable<typeof supabase>["auth"]["getSession"]>>["data"]["session"]>(null);
   const [currentProfile, setCurrentProfile] = useState<UserProfile | null>(null);
+  const [teamProfiles, setTeamProfiles] = useState<TeamProfile[]>([]);
+  const [availableTags, setAvailableTags] = useState<LeadTag[]>([]);
+  const [tasks, setTasks] = useState<LeadTask[]>([]);
+  const [commercialRecords, setCommercialRecords] = useState<
+    Record<string, CommercialRecord>
+  >({});
+  const [installments, setInstallments] = useState<PaymentInstallment[]>([]);
+  const [projects, setProjects] = useState<Record<string, LeadProject>>({});
+  const [crmSettings, setCrmSettings] = useState<CrmSettings>({
+    dailyContactGoal: 20,
+    firstFollowUpDays: 2,
+    secondFollowUpDays: 3,
+  });
   const [signingOut, setSigningOut] = useState(false);
   const [backendLoading, setBackendLoading] = useState(Boolean(supabaseConfigured));
   const [templates, setTemplates] = useState<MessageTemplate[]>(
@@ -444,26 +736,188 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!supabase || !session) return;
+    const client = supabase;
+    if (!client || !session) return;
     let active = true;
     setBackendLoading(true);
-    const leadsRequest = supabase
+    const leadsRequest = client
       .from("leads")
       .select("*, lead_batches(id, name, week_start, status)")
       .order("priority_marked", { ascending: false })
       .order("created_at", { ascending: true });
-    const profileRequest = supabase
+    const profileRequest = client
       .from("profiles")
-      .select("display_name, role")
+      .select("user_id, display_name, role")
       .eq("user_id", session.user.id)
       .maybeSingle();
+    const teamRequest = client
+      .from("profiles")
+      .select("user_id, display_name, role")
+      .order("display_name");
+    const activitiesRequest = client
+      .from("lead_activities")
+      .select("id, lead_id, actor_id, activity_type, title, detail, occurred_at")
+      .order("occurred_at", { ascending: true });
+    const tasksRequest = client
+      .from("lead_tasks")
+      .select("id, lead_id, assigned_to, task_type, title, due_at, status, priority")
+      .eq("status", "pending")
+      .order("due_at", { ascending: true, nullsFirst: true });
+    const tagsRequest = client
+      .from("tags")
+      .select("id, name, color, category, is_system")
+      .order("category")
+      .order("name");
+    const leadTagsRequest = client
+      .from("lead_tags")
+      .select("lead_id, tags(id, name, color, category, is_system)");
+    const templatesRequest = client
+      .from("message_templates")
+      .select("id, title, category, message, favorite, shared, updated_at")
+      .order("sort_order")
+      .order("updated_at", { ascending: false });
+    const commercialRequest = client
+      .from("lead_commercial")
+      .select(
+        "lead_id, offer_type, amount, payment_method, installments_count, status, next_charge_at, domain_included, delivery_status, private_notes",
+      );
+    const installmentsRequest = client
+      .from("payment_installments")
+      .select(
+        "id, lead_id, installment_number, amount, due_date, status, paid_at",
+      )
+      .order("installment_number");
+    const projectsRequest = client
+      .from("lead_projects")
+      .select(
+        "lead_id, status, materials_notes, revision_notes, delivery_notes, domain_name, delivery_due_at, delivered_at",
+      );
+    const settingsRequest = client
+      .from("crm_settings")
+      .select(
+        "daily_contact_goal, first_follow_up_days, second_follow_up_days",
+      )
+      .eq("singleton", true)
+      .maybeSingle();
 
-    void Promise.all([leadsRequest, profileRequest]).then(
-      ([{ data, error }, { data: profileData }]) => {
+    void Promise.all([
+      leadsRequest,
+      profileRequest,
+      teamRequest,
+      activitiesRequest,
+      tasksRequest,
+      tagsRequest,
+      leadTagsRequest,
+      templatesRequest,
+      commercialRequest,
+      installmentsRequest,
+      projectsRequest,
+      settingsRequest,
+    ]).then(
+      async ([
+        { data, error },
+        { data: profileData },
+        { data: teamData },
+        { data: activityData },
+        { data: taskData },
+        { data: tagData },
+        { data: leadTagData },
+        { data: templateData },
+        { data: commercialData },
+        { data: installmentData },
+        { data: projectData },
+        { data: settingsData },
+      ]) => {
         if (!active) return;
+        const profile = (profileData as UserProfile | null) ?? null;
+        const team = ((teamData ?? []) as Array<{
+          user_id: string;
+          display_name: string;
+          role: "owner" | "seller";
+        }>).map((item) => ({
+          userId: item.user_id,
+          displayName: item.display_name,
+          role: item.role,
+        }));
+        const teamNameById = new Map(
+          team.map((member) => [member.userId, member.displayName]),
+        );
+        const activityByLead = new Map<string, Activity[]>();
+        ((activityData ?? []) as DbActivity[]).forEach((item) => {
+          const activity: Activity = {
+            id: item.id,
+            kind: item.activity_type,
+            title: item.title,
+            detail: item.detail,
+            time: activityTimeLabel(item.occurred_at),
+            author:
+              (item.actor_id && teamNameById.get(item.actor_id)) ?? "Sistema",
+            occurredAt: item.occurred_at,
+          };
+          const current = activityByLead.get(item.lead_id) ?? [];
+          current.push(activity);
+          activityByLead.set(item.lead_id, current);
+        });
+        const mappedTasks = ((taskData ?? []) as DbTask[]).map(
+          (item): LeadTask => ({
+            id: item.id,
+            leadId: item.lead_id,
+            assignedTo: item.assigned_to ?? undefined,
+            taskType: item.task_type,
+            title: item.title,
+            dueAt: item.due_at ?? undefined,
+            status: item.status,
+            priority: item.priority,
+          }),
+        );
+        const firstTaskByLead = new Map<string, LeadTask>();
+        mappedTasks.forEach((task) => {
+          if (!firstTaskByLead.has(task.leadId)) {
+            firstTaskByLead.set(task.leadId, task);
+          }
+        });
+        const tagByLead = new Map<string, LeadTag[]>();
+        ((leadTagData ?? []) as DbLeadTag[]).forEach((item) => {
+          const relation = Array.isArray(item.tags) ? item.tags[0] : item.tags;
+          if (!relation) return;
+          const current = tagByLead.get(item.lead_id) ?? [];
+          current.push({
+            id: relation.id,
+            name: relation.name,
+            color: relation.color,
+            category: relation.category,
+            isSystem: relation.is_system,
+          });
+          tagByLead.set(item.lead_id, current);
+        });
+        const mappedCommercial = Object.fromEntries(
+          ((commercialData ?? []) as DbCommercial[]).map((item) => [
+            item.lead_id,
+            {
+              leadId: item.lead_id,
+              offerType: item.offer_type,
+              amount: Number(item.amount),
+              paymentMethod: item.payment_method,
+              installmentsCount: item.installments_count,
+              status: item.status,
+              nextChargeAt: item.next_charge_at ?? undefined,
+              domainIncluded: item.domain_included,
+              deliveryStatus: item.delivery_status,
+              privateNotes: item.private_notes,
+            } satisfies CommercialRecord,
+          ]),
+        );
         if (!error && data) {
           const mapped = data.map((row, index) =>
-            mapDbLead(row as DbLead, index),
+            mapDbLead(row as DbLead, index, {
+              activities: activityByLead.get((row as DbLead).id),
+              tags: tagByLead.get((row as DbLead).id),
+              task: firstTaskByLead.get((row as DbLead).id),
+              commercial: mappedCommercial[(row as DbLead).id],
+              assigneeName:
+                teamNameById.get((row as DbLead).assigned_to ?? "") ??
+                ((row as DbLead).assigned_to ? "Equipe" : undefined),
+            }),
           );
           setLeads(mapped);
           if (
@@ -473,7 +927,97 @@ export default function App() {
             setActiveNav("validation");
           }
         }
-        setCurrentProfile((profileData as UserProfile | null) ?? null);
+        setCurrentProfile(profile);
+        setTeamProfiles(team);
+        setTasks(mappedTasks);
+        setAvailableTags(
+          ((tagData ?? []) as DbTag[]).map((item) => ({
+            id: item.id,
+            name: item.name,
+            color: item.color,
+            category: item.category,
+            isSystem: item.is_system,
+          })),
+        );
+        setCommercialRecords(mappedCommercial);
+        setInstallments(
+          ((installmentData ?? []) as DbInstallment[]).map((item) => ({
+            id: item.id,
+            leadId: item.lead_id,
+            installmentNumber: item.installment_number,
+            amount: Number(item.amount),
+            dueDate: item.due_date,
+            status: item.status,
+            paidAt: item.paid_at ?? undefined,
+          })),
+        );
+        setProjects(
+          Object.fromEntries(
+            ((projectData ?? []) as DbProject[]).map((item) => [
+              item.lead_id,
+              {
+                leadId: item.lead_id,
+                status: item.status,
+                materialsNotes: item.materials_notes,
+                revisionNotes: item.revision_notes,
+                deliveryNotes: item.delivery_notes,
+                domainName: item.domain_name ?? undefined,
+                deliveryDueAt: item.delivery_due_at ?? undefined,
+                deliveredAt: item.delivered_at ?? undefined,
+              } satisfies LeadProject,
+            ]),
+          ),
+        );
+        if (settingsData) {
+          setCrmSettings({
+            dailyContactGoal: settingsData.daily_contact_goal,
+            firstFollowUpDays: settingsData.first_follow_up_days,
+            secondFollowUpDays: settingsData.second_follow_up_days,
+          });
+        }
+        const remoteTemplates = ((templateData ?? []) as DbMessageTemplate[]).map(
+          (item): MessageTemplate => ({
+            id: item.id,
+            title: item.title,
+            category: item.category,
+            message: item.message,
+            favorite: item.favorite,
+            shared: item.shared,
+            updatedLabel: activityTimeLabel(item.updated_at),
+          }),
+        );
+        if (remoteTemplates.length > 0) {
+          setTemplates(remoteTemplates);
+        } else if (profile?.role === "owner" && active) {
+          const rows = initialTemplates.map((template, index) => ({
+            title: template.title,
+            category: template.category,
+            message: template.message,
+            favorite: template.favorite,
+            shared: true,
+            sort_order: index,
+            created_by: session.user.id,
+          }));
+          const { data: seeded } = await client
+            .from("message_templates")
+            .insert(rows)
+            .select(
+              "id, title, category, message, favorite, shared, updated_at",
+            );
+          if (active && seeded) {
+            setTemplates(
+              (seeded as DbMessageTemplate[]).map((item) => ({
+                id: item.id,
+                title: item.title,
+                category: item.category,
+                message: item.message,
+                favorite: item.favorite,
+                shared: item.shared,
+                updatedLabel: "Sincronizada",
+              })),
+            );
+          }
+        }
         setBackendLoading(false);
         if (error) showToast(`Não foi possível carregar os leads: ${error.message}`);
       },
@@ -490,6 +1034,18 @@ export default function App() {
   const selectedLead = useMemo(
     () => leads.find((lead) => lead.id === selectedLeadId) ?? null,
     [leads, selectedLeadId],
+  );
+  const isOwner = currentProfile?.role !== "seller";
+  const ownerOptions = useMemo<Owner[]>(
+    () => {
+      if (currentProfile?.role === "seller") {
+        return [currentProfile.display_name];
+      }
+      return teamProfiles.length > 0
+        ? [...teamProfiles.map((profile) => profile.displayName), "Equipe"]
+        : [...owners];
+    },
+    [currentProfile, teamProfiles],
   );
 
   useEffect(() => {
@@ -731,10 +1287,38 @@ export default function App() {
   };
 
   const setInitialMessageSent = (leadId: number, initialMessageSent: boolean) => {
-    updateLead(leadId, (lead) => ({
-      ...lead,
-      initialMessageSent,
-    }));
+    updateLead(leadId, (lead) => {
+      const followUpAt = initialMessageSent
+        ? futureBusinessIso(crmSettings.firstFollowUpDays)
+        : new Date().toISOString();
+      const schedule = scheduleFromIso(followUpAt);
+      return addActivity(
+        {
+          ...lead,
+          initialMessageSent,
+          lastContactedAt: initialMessageSent
+            ? new Date().toISOString()
+            : lead.lastContactedAt,
+          nextAction: initialMessageSent
+            ? "Enviar primeiro follow-up"
+            : "Enviar mensagem inicial",
+          nextActionAt: followUpAt,
+          scheduleDay: schedule.scheduleDay,
+          dueTime: schedule.dueTime,
+          overdue: false,
+        },
+        {
+          kind: "message",
+          title: initialMessageSent
+            ? "Mensagem inicial enviada"
+            : "Marcação de contato removida",
+          detail: initialMessageSent
+            ? "Primeiro contato registrado pela equipe."
+            : "O lead voltou para a fila de não contatados.",
+          author: currentProfile?.display_name ?? "Equipe",
+        },
+      );
+    });
     showToast(
       initialMessageSent
         ? "Mensagem inicial marcada como enviada."
@@ -813,6 +1397,104 @@ export default function App() {
     }
   };
 
+  const persistNewActivities = async (previous: Lead, changed: Lead) => {
+    if (!supabase || !session || !changed.remoteId) return;
+    const previousIds = new Set(previous.activities.map((item) => item.id));
+    const additions = changed.activities.filter(
+      (item) => !previousIds.has(item.id),
+    );
+    if (additions.length === 0) return;
+    const { error } = await supabase.from("lead_activities").insert(
+      additions.map((activity) => ({
+        lead_id: changed.remoteId,
+        actor_id: session.user.id,
+        activity_type: activity.kind,
+        title: activity.title,
+        detail: activity.detail,
+        metadata: {},
+        occurred_at: activity.occurredAt ?? new Date().toISOString(),
+      })),
+    );
+    if (error) {
+      showToast(`O lead foi salvo, mas o histórico falhou: ${error.message}`);
+    }
+  };
+
+  const syncPendingTask = async (lead: Lead) => {
+    if (!supabase || !session || !lead.remoteId) return;
+    const shouldClose =
+      Boolean(lead.archived) ||
+      lead.doNotContact ||
+      lead.nextAction === "Nenhuma ação necessária";
+    if (shouldClose) {
+      await supabase
+        .from("lead_tasks")
+        .update({
+          status: "cancelled",
+          completed_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("lead_id", lead.remoteId)
+        .eq("status", "pending");
+      setTasks((current) =>
+        current.filter((task) => task.leadId !== lead.remoteId),
+      );
+      return;
+    }
+
+    const taskPayload = {
+      assigned_to: lead.assignedTo ?? null,
+      title: lead.nextAction,
+      due_at: lead.nextActionAt ?? null,
+      priority: lead.priority,
+      updated_at: new Date().toISOString(),
+    };
+    const { data: updated, error: updateError } = await supabase
+      .from("lead_tasks")
+      .update(taskPayload)
+      .eq("lead_id", lead.remoteId)
+      .eq("status", "pending")
+      .select(
+        "id, lead_id, assigned_to, task_type, title, due_at, status, priority",
+      );
+    if (updateError) return;
+    let taskRow = (updated?.[0] as DbTask | undefined) ?? null;
+    if (!taskRow) {
+      const { data: inserted, error: insertError } = await supabase
+        .from("lead_tasks")
+        .insert({
+          lead_id: lead.remoteId,
+          assigned_to: lead.assignedTo ?? null,
+          created_by: session.user.id,
+          task_type: lead.initialMessageSent ? "follow_up" : "initial_contact",
+          title: lead.nextAction,
+          due_at: lead.nextActionAt ?? null,
+          status: "pending",
+          priority: lead.priority,
+        })
+        .select(
+          "id, lead_id, assigned_to, task_type, title, due_at, status, priority",
+        )
+        .single();
+      if (insertError) return;
+      taskRow = inserted as DbTask;
+    }
+    const mappedTask: LeadTask = {
+      id: taskRow.id,
+      leadId: taskRow.lead_id,
+      assignedTo: taskRow.assigned_to ?? undefined,
+      taskType: taskRow.task_type,
+      title: taskRow.title,
+      dueAt: taskRow.due_at ?? undefined,
+      status: taskRow.status,
+      priority: taskRow.priority,
+    };
+    setTasks((current) => [
+      ...current.filter((task) => task.leadId !== mappedTask.leadId),
+      mappedTask,
+    ]);
+  };
+
   const updateLead = (leadId: number, updater: (lead: Lead) => Lead) => {
     const current = leadsRef.current;
     const existing = current.find((lead) => lead.id === leadId);
@@ -823,6 +1505,15 @@ export default function App() {
     leadsRef.current = next;
     setLeads(next);
     void saveLeadPatch(changed);
+    void persistNewActivities(existing, changed);
+    const taskChanged =
+      existing.nextAction !== changed.nextAction ||
+      existing.nextActionAt !== changed.nextActionAt ||
+      existing.priority !== changed.priority ||
+      existing.assignedTo !== changed.assignedTo ||
+      existing.archived !== changed.archived ||
+      existing.doNotContact !== changed.doNotContact;
+    if (taskChanged) void syncPendingTask(changed);
   };
 
   const deleteLead = async (leadId: number) => {
@@ -900,6 +1591,7 @@ export default function App() {
         ...activity,
         id: Date.now(),
         time: `Hoje, ${nowLabel()}`,
+        occurredAt: new Date().toISOString(),
       },
     ],
   });
@@ -910,6 +1602,12 @@ export default function App() {
   };
 
   const navigate = (key: NavKey) => {
+    if (!isOwner && (key === "finance" || key === "previews")) {
+      setActiveNav("dashboard");
+      setSelectedLeadId(null);
+      showToast("Esta área é privada para os sócios.");
+      return;
+    }
     setActiveNav(key);
     setSelectedLeadId(null);
   };
@@ -936,19 +1634,33 @@ export default function App() {
   };
 
   const changeOwner = (leadId: number, owner: Owner) => {
+    const assignee = teamProfiles.find(
+      (profile) =>
+        profile.displayName === owner || profile.userId === owner,
+    );
+    const ownerName = assignee?.displayName ?? owner;
     updateLead(leadId, (lead) => {
-      if (lead.owner === owner) return lead;
+      if (
+        lead.owner === ownerName &&
+        lead.assignedTo === assignee?.userId
+      ) {
+        return lead;
+      }
       return addActivity(
-        { ...lead, owner },
+        {
+          ...lead,
+          owner: ownerName,
+          assignedTo: assignee?.userId,
+        },
         {
           kind: "note",
-          title: `Responsável alterado para ${ownerLabels[owner]}`,
+          title: `Responsável alterado para ${ownerLabel(ownerName)}`,
           detail: "Responsável da prospecção atualizado.",
           author: "Você",
         },
       );
     });
-    showToast(`Responsável atualizado para ${ownerLabels[owner]}.`);
+    showToast(`Responsável atualizado para ${ownerLabel(ownerName)}.`);
   };
 
   const validateLead = (
@@ -961,6 +1673,9 @@ export default function App() {
       time: string;
     },
   ) => {
+    const assignee = teamProfiles.find(
+      (profile) => profile.displayName === settings.owner,
+    );
     updateLead(leadId, (lead) =>
       addActivity(
         {
@@ -970,7 +1685,8 @@ export default function App() {
           discardReason: undefined,
           stage: "Contatar",
           priority: settings.priority,
-          owner: settings.owner,
+          owner: assignee?.displayName ?? settings.owner,
+          assignedTo: assignee?.userId,
           nextAction: settings.nextAction,
           nextActionAt: scheduleToIso(settings.day, settings.time),
           scheduleDay: settings.day,
@@ -992,6 +1708,9 @@ export default function App() {
     batchName: string,
     settings: BatchValidationSettings,
   ) => {
+    const assignee = teamProfiles.find(
+      (profile) => profile.displayName === settings.owner,
+    );
     const targets = leads.filter(
       (lead) =>
         lead.batchName === batchName && lead.validationStatus === "pending",
@@ -1002,14 +1721,21 @@ export default function App() {
     }
 
     const validatedAt = new Date().toISOString();
-    setLeads((current) =>
-      current.map((lead) => {
+    const scheduleByLeadId = new Map(
+      targets.map((lead, index) => [
+        lead.id,
+        batchSlotIso(index, crmSettings.dailyContactGoal),
+      ]),
+    );
+    const nextLeads = leadsRef.current.map((lead) => {
         if (
           lead.batchName !== batchName ||
           lead.validationStatus !== "pending"
         ) {
           return lead;
         }
+        const scheduledAt = scheduleByLeadId.get(lead.id);
+        const scheduled = scheduleFromIso(scheduledAt);
         return addActivity(
           {
             ...lead,
@@ -1019,29 +1745,32 @@ export default function App() {
             archived: false,
             stage: "Contatar",
             priority: "Normal",
-            owner: settings.owner,
+            owner: assignee?.displayName ?? settings.owner,
+            assignedTo: assignee?.userId,
             nextAction: "Enviar mensagem inicial",
-            nextActionAt: undefined,
-            scheduleDay: "Hoje",
-            dueTime: "A definir",
+            nextActionAt: scheduledAt,
+            scheduleDay: scheduled.scheduleDay,
+            dueTime: scheduled.dueTime,
             overdue: false,
           },
           {
             kind: "validation",
             title: "Lead aprovado junto com o lote",
             detail:
-              "Prioridade Normal (sem qualificação individual) · Enviar mensagem inicial.",
+              "Prioridade Normal (sem qualificação individual) · Distribuído automaticamente na capacidade diária.",
             author: "Você",
           },
         );
-      }),
-    );
+      });
+    leadsRef.current = nextLeads;
+    setLeads(nextLeads);
 
     const remoteIds = targets.flatMap((lead) =>
       lead.remoteId ? [lead.remoteId] : [],
     );
-    if (supabase && session && remoteIds.length > 0) {
-      void supabase
+    const batchClient = supabase;
+    if (batchClient && session && remoteIds.length > 0) {
+      void batchClient
         .from("leads")
         .update({
           validation_status: "valid",
@@ -1052,24 +1781,57 @@ export default function App() {
           stage: "Contatar",
           priority: "Normal",
           priority_marked: false,
-          owner: settings.owner,
+          owner: assignee?.displayName ?? settings.owner,
+          assigned_to: assignee?.userId ?? null,
           next_action: "Enviar mensagem inicial",
           next_action_at: null,
           updated_at: validatedAt,
         })
         .eq("validation_status", "pending")
         .in("id", remoteIds)
-        .then(({ error }) => {
+        .then(async ({ error }) => {
           if (error) {
             showToast(
               `Os leads foram atualizados na tela, mas não foi possível salvar: ${error.message}`,
             );
+            return;
           }
+          await batchClient.from("lead_activities").insert(
+            targets.flatMap((lead) =>
+              lead.remoteId
+                ? [{
+              lead_id: lead.remoteId,
+              actor_id: session.user.id,
+              activity_type: "validation",
+              title: "Lead aprovado junto com o lote",
+              detail:
+                "Prioridade Normal (sem qualificação individual) · Distribuído automaticamente na capacidade diária.",
+              occurred_at: validatedAt,
+            }]
+                : [],
+            ),
+          );
+          await batchClient.from("lead_tasks").insert(
+            targets.flatMap((lead) =>
+              lead.remoteId
+                ? [{
+              lead_id: lead.remoteId,
+              assigned_to: assignee?.userId ?? null,
+              created_by: session.user.id,
+              task_type: "initial_contact",
+              title: "Enviar mensagem inicial",
+              due_at: scheduleByLeadId.get(lead.id) ?? null,
+              status: "pending",
+              priority: "Normal",
+            }]
+                : [],
+            ),
+          );
         });
     }
 
     showToast(
-      `${targets.length} leads aprovados com prioridade normal e enviados para Leads.`,
+      `${targets.length} leads aprovados e distribuídos pela capacidade diária da equipe.`,
     );
   };
 
@@ -1117,6 +1879,9 @@ export default function App() {
       profile_url: lead.instagramUrl,
       segment: lead.category,
       owner: lead.owner,
+      assigned_to:
+        teamProfiles.find((profile) => profile.displayName === lead.owner)
+          ?.userId ?? null,
       priority: lead.priority,
       priority_marked:
         lead.priority === "Urgente" || lead.priority === "Alta",
@@ -1204,7 +1969,12 @@ export default function App() {
         validationStatus: "pending",
         batchName,
         sourceType: "instagram",
-        owner: "Você",
+        owner:
+          currentProfile?.role === "seller"
+            ? currentProfile.display_name
+            : "Equipe",
+        assignedTo:
+          currentProfile?.role === "seller" ? session?.user.id : undefined,
         stage: "Validar",
         nextAction: "Abrir perfil e validar",
         priority: row.priority,
@@ -1215,6 +1985,9 @@ export default function App() {
         offer: "Sem domínio",
         amount: 200,
         paymentStatus: "Não aprovado",
+        tags: [],
+        contactPermission: "public_contact",
+        doNotContact: false,
         activities: [
           {
             id: Date.now() + index,
@@ -1313,7 +2086,12 @@ export default function App() {
       segment: lead.segment ?? null,
       stage: "Validar",
       site_status: "Não verificado",
-      owner: "Você",
+      owner:
+        currentProfile?.role === "seller"
+          ? currentProfile.display_name
+          : "Equipe",
+      assigned_to:
+        currentProfile?.role === "seller" ? session.user.id : null,
       is_validated: false,
       prospecting_done: false,
       has_instagram: true,
@@ -1377,6 +2155,49 @@ export default function App() {
     showToast(`${ids.length} leads atualizados.`);
   };
 
+  const scheduleMany = (ids: number[], day: WeekDay) => {
+    ids.forEach((leadId) =>
+      updateLead(leadId, (lead) => {
+        const time = /^\d{2}:\d{2}$/.test(lead.dueTime)
+          ? lead.dueTime
+          : "10:00";
+        return {
+          ...lead,
+          scheduleDay: day,
+          dueTime: time,
+          nextActionAt: scheduleToIso(day, time),
+          overdue: false,
+        };
+      }),
+    );
+    showToast(`${ids.length} leads reagendados para ${day}.`);
+  };
+
+  const changeDailyTarget = (target: number) => {
+    const safeTarget = Math.min(200, Math.max(1, Math.round(target || 1)));
+    setCrmSettings((current) => ({
+      ...current,
+      dailyContactGoal: safeTarget,
+    }));
+    if (isOwner && supabase && session) {
+      void supabase
+        .from("crm_settings")
+        .update({
+          daily_contact_goal: safeTarget,
+          updated_by: session.user.id,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("singleton", true)
+        .then(({ error }) => {
+          showToast(
+            error
+              ? `Não foi possível salvar a meta: ${error.message}`
+              : `Meta diária atualizada para ${safeTarget} contatos.`,
+          );
+        });
+    }
+  };
+
   const addNote = (note: string) => {
     if (!selectedLead) return;
     updateLead(selectedLead.id, (lead) =>
@@ -1406,8 +2227,14 @@ export default function App() {
       "Não interessado": "Contatar",
       "Retornar depois": "Contatar",
       "Já possui site": "Contatar",
+      "Não contatar": "Contatar",
     };
     const alreadyHasSite = outcome === "Já possui site";
+    const shouldClose =
+      outcome === "Não interessado" ||
+      alreadyHasSite ||
+      outcome === "Não contatar";
+    const now = new Date().toISOString();
     const markedInitialMessageSent = Boolean(
       initialMessageSent || outcome === "Mensagem enviada",
     );
@@ -1416,14 +2243,30 @@ export default function App() {
         {
           ...lead,
           initialMessageSent: markedInitialMessageSent,
+          lastContactedAt: markedInitialMessageSent
+            ? lead.lastContactedAt ?? now
+            : lead.lastContactedAt,
+          lastResponseAt: ["Interessado", "Não interessado", "Já possui site", "Retornar depois"].includes(
+            outcome,
+          )
+            ? now
+            : lead.lastResponseAt,
           stage: stageByOutcome[outcome] ?? lead.stage,
-          nextAction: alreadyHasSite
+          nextAction: shouldClose
             ? "Nenhuma ação necessária"
             : nextAction,
-          scheduleDay: alreadyHasSite ? lead.scheduleDay : scheduleDay,
-          dueTime: alreadyHasSite ? lead.dueTime : dueTime,
+          nextActionAt: shouldClose
+            ? undefined
+            : scheduleToIso(scheduleDay, dueTime),
+          scheduleDay: shouldClose ? lead.scheduleDay : scheduleDay,
+          dueTime: shouldClose ? lead.dueTime : dueTime,
           overdue: false,
-          archived: outcome === "Não interessado" || alreadyHasSite,
+          archived: shouldClose,
+          doNotContact: outcome === "Não contatar",
+          contactPermission:
+            outcome === "Não contatar" ? "opted_out" : lead.contactPermission,
+          closedAt: shouldClose ? now : undefined,
+          closedReason: shouldClose ? outcome : undefined,
           siteStatus: alreadyHasSite ? "Tem site" : lead.siteStatus,
         },
         {
@@ -1444,8 +2287,8 @@ export default function App() {
       ),
     );
     showToast(
-      alreadyHasSite
-        ? "Lead marcado como já possui site e retirado da fila."
+      shouldClose
+        ? "Lead retirado da fila ativa e preservado no histórico."
         : `${outcome} registrado. Próximo lead aberto.`,
     );
   };
@@ -1606,27 +2449,6 @@ export default function App() {
     showToast("Solicitação de ajustes registrada.");
   };
 
-  const markPaid = () => {
-    if (!selectedLead) return;
-    updateLead(selectedLead.id, (lead) =>
-      addActivity(
-        {
-          ...lead,
-          stage: "Pagamento",
-          paymentStatus: "Pago",
-          nextAction: "Preparar entrega",
-        },
-        {
-          kind: "note",
-          title: "Pagamento confirmado",
-          detail: `Pagamento de R$ ${lead.amount} confirmado manualmente.`,
-          author: "Você",
-        },
-      ),
-    );
-    showToast("Pagamento confirmado. Próxima etapa: entrega.");
-  };
-
   const openClientPreview = (leadId?: number) => {
     const id = leadId ?? selectedLead?.id;
     const lead = leads.find((item) => item.id === id);
@@ -1700,45 +2522,307 @@ export default function App() {
     if (id) setModal({ type: "scripts", leadId: id });
   };
 
+  const createTag = async (
+    name: string,
+    category: string,
+  ): Promise<LeadTag | null> => {
+    const normalized = name.trim();
+    if (!normalized || !isOwner || !supabase || !session) return null;
+    const existing = availableTags.find(
+      (tag) => tag.name.toLowerCase() === normalized.toLowerCase(),
+    );
+    if (existing) return existing;
+
+    const { data, error } = await supabase
+      .from("tags")
+      .insert({
+        name: normalized,
+        category: category.trim() || "Personalizada",
+        color: "#8FFF00",
+        is_system: false,
+        created_by: session.user.id,
+      })
+      .select("id, name, color, category, is_system")
+      .single();
+    if (error || !data) {
+      showToast(`Não foi possível criar a etiqueta: ${error?.message ?? "erro desconhecido"}`);
+      return null;
+    }
+    const created: LeadTag = {
+      id: data.id as string,
+      name: data.name as string,
+      color: data.color as string,
+      category: data.category as string,
+      isSystem: Boolean(data.is_system),
+    };
+    setAvailableTags((current) => [...current, created]);
+    showToast(`Etiqueta “${created.name}” criada para a equipe.`);
+    return created;
+  };
+
+  const toggleLeadTag = async (leadId: number, tag: LeadTag) => {
+    const lead = leadsRef.current.find((item) => item.id === leadId);
+    if (!lead) return;
+    const selected = lead.tags.some((item) => item.id === tag.id);
+    updateLead(leadId, (current) => ({
+      ...current,
+      tags: selected
+        ? current.tags.filter((item) => item.id !== tag.id)
+        : [...current.tags, tag],
+    }));
+    if (!supabase || !session || !lead.remoteId) return;
+    const request = selected
+      ? supabase
+          .from("lead_tags")
+          .delete()
+          .eq("lead_id", lead.remoteId)
+          .eq("tag_id", tag.id)
+      : supabase.from("lead_tags").insert({
+          lead_id: lead.remoteId,
+          tag_id: tag.id,
+          added_by: session.user.id,
+        });
+    const { error } = await request;
+    if (error) {
+      updateLead(leadId, (current) => ({
+        ...current,
+        tags: selected
+          ? [...current.tags, tag]
+          : current.tags.filter((item) => item.id !== tag.id),
+      }));
+      showToast(`Não foi possível atualizar a etiqueta: ${error.message}`);
+    }
+  };
+
+  const updateContactControl = (
+    leadId: number,
+    permission: Lead["contactPermission"],
+    doNotContact: boolean,
+  ) => {
+    updateLead(leadId, (lead) =>
+      addActivity(
+        {
+          ...lead,
+          contactPermission: permission,
+          doNotContact,
+          archived: doNotContact ? true : lead.archived,
+          nextAction: doNotContact
+            ? "Nenhuma ação necessária"
+            : lead.nextAction,
+          nextActionAt: doNotContact ? undefined : lead.nextActionAt,
+          closedAt: doNotContact ? new Date().toISOString() : lead.closedAt,
+          closedReason: doNotContact ? "Não contatar" : lead.closedReason,
+        },
+        {
+          kind: "note",
+          title: doNotContact ? "Contato bloqueado" : "Preferência de contato atualizada",
+          detail: doNotContact
+            ? "Lead marcado para não receber novas abordagens."
+            : "A origem/permissão do contato foi atualizada.",
+          author: currentProfile?.display_name ?? "Equipe",
+        },
+      ),
+    );
+    showToast(doNotContact ? "Lead bloqueado para novas abordagens." : "Preferência de contato salva.");
+  };
+
+  const saveCommercialBundle = async (
+    commercial: CommercialRecord,
+    project: LeadProject,
+    nextInstallments: PaymentInstallment[],
+  ) => {
+    if (!isOwner || !supabase || !session) {
+      showToast("Somente os sócios podem salvar dados comerciais.");
+      return;
+    }
+    const leadId = commercial.leadId;
+    const { error: commercialError } = await supabase
+      .from("lead_commercial")
+      .upsert({
+        lead_id: leadId,
+        offer_type: commercial.offerType,
+        amount: commercial.amount,
+        payment_method: commercial.paymentMethod,
+        installments_count: commercial.installmentsCount,
+        status: commercial.status,
+        next_charge_at: commercial.nextChargeAt || null,
+        domain_included: commercial.domainIncluded,
+        delivery_status: commercial.deliveryStatus,
+        private_notes: commercial.privateNotes,
+        updated_by: session.user.id,
+        updated_at: new Date().toISOString(),
+      });
+    if (commercialError) {
+      showToast(`Não foi possível salvar o comercial: ${commercialError.message}`);
+      return;
+    }
+
+    const { error: projectError } = await supabase
+      .from("lead_projects")
+      .upsert({
+        lead_id: leadId,
+        status: project.status,
+        materials_notes: project.materialsNotes,
+        revision_notes: project.revisionNotes,
+        delivery_notes: project.deliveryNotes,
+        domain_name: project.domainName || null,
+        delivery_due_at: project.deliveryDueAt || null,
+        delivered_at: project.deliveredAt || null,
+        updated_by: session.user.id,
+        updated_at: new Date().toISOString(),
+      });
+    if (projectError) {
+      showToast(`Comercial salvo, mas o projeto falhou: ${projectError.message}`);
+      return;
+    }
+
+    const { error: removeError } = await supabase
+      .from("payment_installments")
+      .delete()
+      .eq("lead_id", leadId);
+    if (removeError) {
+      showToast(`Não foi possível atualizar as parcelas: ${removeError.message}`);
+      return;
+    }
+    const payableRows = nextInstallments.filter(
+      (payment) => payment.dueDate && payment.amount >= 0,
+    );
+    if (payableRows.length > 0) {
+      const { error: installmentError } = await supabase
+        .from("payment_installments")
+        .insert(
+          payableRows.map((payment) => ({
+            lead_id: leadId,
+            installment_number: payment.installmentNumber,
+            amount: payment.amount,
+            due_date: payment.dueDate,
+            status: payment.status,
+            paid_at: payment.status === "Pago"
+              ? payment.paidAt ?? new Date().toISOString()
+              : null,
+          })),
+        );
+      if (installmentError) {
+        showToast(`Projeto salvo, mas as parcelas falharam: ${installmentError.message}`);
+        return;
+      }
+    }
+    setCommercialRecords((current) => ({
+      ...current,
+      [leadId]: commercial,
+    }));
+    setProjects((current) => ({ ...current, [leadId]: project }));
+    setInstallments((current) => [
+      ...current.filter((payment) => payment.leadId !== leadId),
+      ...payableRows,
+    ]);
+    updateLead(
+      leadsRef.current.find((lead) => lead.remoteId === leadId)?.id ?? -1,
+      (lead) => ({
+        ...lead,
+        offer: commercial.domainIncluded ? "Com domínio" : "Sem domínio",
+        amount: commercial.amount,
+        paymentStatus:
+          commercial.status === "Pago"
+            ? "Pago"
+            : commercial.status === "Aguardando pagamento" ||
+                commercial.status === "Parcial" ||
+                commercial.status === "Atrasado"
+              ? "Aguardando PIX"
+              : "Não aprovado",
+      }),
+    );
+    showToast("Dados privados de comercial, cobrança e entrega salvos.");
+  };
+
   const createTemplate = () => {
     const id = Date.now();
-    setTemplates((current) => [
-      {
-        id,
-        title: "Nova mensagem",
-        category: current[0]?.category ?? "Prospecção",
-        message: "Olá, [nome]! ",
-        favorite: false,
-        shared: true,
-        updatedLabel: "Criado agora",
-      },
-      ...current,
-    ]);
+    const created: MessageTemplate = {
+      id,
+      title: "Nova mensagem",
+      category: templates[0]?.category ?? "Prospecção",
+      message: "Olá, [nome]! ",
+      favorite: false,
+      shared: true,
+      updatedLabel: "Criado agora",
+    };
+    setTemplates((current) => [created, ...current]);
+    if (isOwner && supabase && session) {
+      void supabase
+        .from("message_templates")
+        .insert({
+          title: created.title,
+          category: created.category,
+          message: created.message,
+          favorite: created.favorite,
+          shared: created.shared,
+          created_by: session.user.id,
+        })
+        .select("id, title, category, message, favorite, shared, updated_at")
+        .single()
+        .then(({ data, error }) => {
+          if (error || !data) {
+            showToast(`Não foi possível sincronizar a mensagem: ${error?.message ?? "erro desconhecido"}`);
+            return;
+          }
+          setTemplates((current) =>
+            current.map((template) =>
+              template.id === id
+                ? {
+                    ...template,
+                    id: data.id as string,
+                    updatedLabel: "Sincronizada",
+                  }
+                : template,
+            ),
+          );
+        });
+    }
     showToast("Nova mensagem criada. Edite e salve quando terminar.");
     return id;
   };
 
-  const duplicateTemplate = (id: number) => {
+  const duplicateTemplate = (id: MessageTemplate["id"]) => {
     const nextId = Date.now();
-    setTemplates((current) => {
-      const source = current.find((template) => template.id === id);
-      if (!source) return current;
-      return [
-        {
-          ...source,
-          id: nextId,
-          title: `${source.title} — cópia`,
+    const source = templates.find((template) => template.id === id);
+    if (!source) return id;
+    const duplicate: MessageTemplate = {
+      ...source,
+      id: nextId,
+      title: `${source.title} — cópia`,
+      favorite: false,
+      updatedLabel: "Duplicado agora",
+    };
+    setTemplates((current) => [duplicate, ...current]);
+    if (isOwner && supabase && session) {
+      void supabase
+        .from("message_templates")
+        .insert({
+          title: duplicate.title,
+          category: duplicate.category,
+          message: duplicate.message,
           favorite: false,
-          updatedLabel: "Duplicado agora",
-        },
-        ...current,
-      ];
-    });
+          shared: duplicate.shared,
+          created_by: session.user.id,
+        })
+        .select("id")
+        .single()
+        .then(({ data }) => {
+          if (!data) return;
+          setTemplates((current) =>
+            current.map((template) =>
+              template.id === nextId
+                ? { ...template, id: data.id as string, updatedLabel: "Sincronizada" }
+                : template,
+            ),
+          );
+        });
+    }
     showToast("Mensagem duplicada.");
     return nextId;
   };
 
-  const deleteTemplate = (id: number) => {
+  const deleteTemplate = (id: MessageTemplate["id"]) => {
     if (templates.length <= 1) {
       showToast("Mantenha pelo menos uma mensagem cadastrada.");
       return;
@@ -1746,11 +2830,20 @@ export default function App() {
     setTemplates((current) =>
       current.filter((template) => template.id !== id),
     );
+    if (typeof id === "string" && isOwner && supabase) {
+      void supabase
+        .from("message_templates")
+        .delete()
+        .eq("id", id)
+        .then(({ error }) => {
+          if (error) showToast(`Não foi possível excluir no servidor: ${error.message}`);
+        });
+    }
     showToast("Mensagem excluída.");
   };
 
   const updateTemplate = (
-    id: number,
+    id: MessageTemplate["id"],
     patch: Partial<MessageTemplate>,
   ) => {
     setTemplates((current) =>
@@ -1758,6 +2851,23 @@ export default function App() {
         template.id === id ? { ...template, ...patch } : template,
       ),
     );
+    if (typeof id === "string" && isOwner && supabase) {
+      const dbPatch = {
+        ...(patch.title !== undefined ? { title: patch.title } : {}),
+        ...(patch.category !== undefined ? { category: patch.category } : {}),
+        ...(patch.message !== undefined ? { message: patch.message } : {}),
+        ...(patch.favorite !== undefined ? { favorite: patch.favorite } : {}),
+        ...(patch.shared !== undefined ? { shared: patch.shared } : {}),
+        updated_at: new Date().toISOString(),
+      };
+      void supabase
+        .from("message_templates")
+        .update(dbPatch)
+        .eq("id", id)
+        .then(({ error }) => {
+          if (error) showToast(`Não foi possível salvar a mensagem: ${error.message}`);
+        });
+    }
   };
 
   if (supabaseConfigured && !authReady && !devPreview) {
@@ -1789,11 +2899,34 @@ export default function App() {
           updatePreviewAccessMode(selectedLead.id, requiresLogin)
         }
         onCopyPreviewLink={copyPreviewLink}
-        onMarkPaid={markPaid}
         onOpenMessages={() => openMessages()}
         onWhatsAppChange={(number) =>
           updateWhatsAppNumber(selectedLead.id, number)
         }
+        isOwner={isOwner}
+        ownerOptions={ownerOptions}
+        availableTags={availableTags}
+        onToggleTag={(tag) => void toggleLeadTag(selectedLead.id, tag)}
+        onCreateTag={createTag}
+        onContactControlChange={(permission, doNotContact) =>
+          updateContactControl(selectedLead.id, permission, doNotContact)
+        }
+        commercial={
+          selectedLead.remoteId
+            ? commercialRecords[selectedLead.remoteId]
+            : undefined
+        }
+        project={
+          selectedLead.remoteId ? projects[selectedLead.remoteId] : undefined
+        }
+        installments={
+          selectedLead.remoteId
+            ? installments.filter(
+                (payment) => payment.leadId === selectedLead.remoteId,
+              )
+            : []
+        }
+        onSaveCommercial={saveCommercialBundle}
       />
     );
   } else if (activeNav === "dashboard") {
@@ -1807,13 +2940,15 @@ export default function App() {
         onImport={() => setModal({ type: "import" })}
         onOpenMessages={openMessages}
         onPriorityChange={changePriority}
-        onDelete={deleteLead}
+        onDelete={isOwner ? deleteLead : undefined}
         deletingLeadId={deletingLeadId}
         onBulkOwner={(ids, owner) => updateMany(ids, { owner })}
         onBulkStage={(ids, stage) => updateMany(ids, { stage })}
-        onBulkSchedule={(ids, scheduleDay) =>
-          updateMany(ids, { scheduleDay, overdue: false })
-        }
+        onBulkSchedule={scheduleMany}
+        ownerOptions={ownerOptions}
+        dailyTarget={crmSettings.dailyContactGoal}
+        canManageSettings={isOwner}
+        onDailyTargetChange={changeDailyTarget}
       />
     );
   } else if (activeNav === "validation") {
@@ -1825,6 +2960,7 @@ export default function App() {
         onDiscard={discardLead}
         onNewLead={() => setModal({ type: "new-lead" })}
         onImport={() => setModal({ type: "import" })}
+        ownerOptions={ownerOptions}
       />
     );
   } else if (activeNav === "prospecting") {
@@ -1839,6 +2975,12 @@ export default function App() {
         onOwnerChange={changeOwner}
         onInitialMessageSent={setInitialMessageSent}
         onWhatsAppChange={updateWhatsAppNumber}
+        ownerOptions={ownerOptions}
+        dailyTarget={crmSettings.dailyContactGoal}
+        availableTags={availableTags}
+        canCreateTags={isOwner}
+        onToggleTag={(leadId, tag) => void toggleLeadTag(leadId, tag)}
+        onCreateTag={createTag}
         onSaveOutcome={saveProspectingOutcome}
       />
     );
@@ -1849,8 +2991,10 @@ export default function App() {
         onSelectLead={selectLead}
         onOpenMessages={openMessages}
         onPriorityChange={changePriority}
-        onDelete={deleteLead}
+        onDelete={isOwner ? deleteLead : undefined}
         deletingLeadId={deletingLeadId}
+        ownerOptions={ownerOptions}
+        availableTags={availableTags}
       />
     );
   } else if (activeNav === "previews") {
@@ -1871,12 +3015,17 @@ export default function App() {
         onUpdate={updateTemplate}
         onSaved={(title) => showToast(`${title}: alterações salvas.`)}
         onCopied={(title) => showToast(`${title}: mensagem copiada.`)}
+        readOnly={!isOwner}
       />
     );
   } else {
     content = (
       <FinanceView
         leads={leads.filter((lead) => lead.validationStatus === "valid")}
+        commercial={commercialRecords}
+        installments={installments}
+        projects={projects}
+        onSelectLead={selectLead}
       />
     );
   }
@@ -1899,13 +3048,22 @@ export default function App() {
         profileEmail={session?.user.email ?? ""}
         profileRole={currentProfile?.role === "seller" ? "Vendedor" : "Sócio / dono"}
         signingOut={signingOut}
+        isOwner={isOwner}
         onNavigate={navigate}
         onToggleTheme={() =>
           setTheme((current) => (current === "light" ? "dark" : "light"))
         }
         onSignOut={() => void signOut()}
       >
-        {content}
+        <Suspense
+          fallback={
+            <div className="route-loading" role="status">
+              Carregando esta área…
+            </div>
+          }
+        >
+          {content}
+        </Suspense>
       </AppShell>
 
       {modal?.type === "new-lead" && (
@@ -1913,6 +3071,7 @@ export default function App() {
           <NewLeadForm
             onCancel={() => setModal(null)}
             onSubmit={(lead) => void createManualLead(lead)}
+            ownerOptions={ownerOptions}
           />
         </Modal>
       )}
@@ -1982,14 +3141,18 @@ export default function App() {
 function NewLeadForm({
   onCancel,
   onSubmit,
+  ownerOptions,
 }: {
   onCancel: () => void;
   onSubmit: (lead: Lead) => void;
+  ownerOptions: Owner[];
 }) {
   const [handle, setHandle] = useState("");
   const [fullName, setFullName] = useState("");
   const [category, setCategory] = useState("");
-  const [owner, setOwner] = useState<Owner>("Você");
+  const [owner, setOwner] = useState<Owner>(
+    () => ownerOptions[0] ?? "Equipe",
+  );
   const [priority, setPriority] = useState<Priority>("Normal");
   const [whatsapp, setWhatsapp] = useState("");
 
@@ -2023,6 +3186,9 @@ function NewLeadForm({
       offer: "Sem domínio",
       amount: 200,
       paymentStatus: "Não aprovado",
+      tags: [],
+      contactPermission: "public_contact",
+      doNotContact: false,
       activities: [
         {
           id: Date.now(),
@@ -2089,9 +3255,9 @@ function NewLeadForm({
             value={owner}
             onChange={(event) => setOwner(event.target.value as Owner)}
           >
-            {owners.map((teamOwner) => (
+            {ownerOptions.map((teamOwner) => (
               <option key={teamOwner} value={teamOwner}>
-                {ownerLabels[teamOwner]}
+                {ownerLabel(teamOwner)}
               </option>
             ))}
           </select>
