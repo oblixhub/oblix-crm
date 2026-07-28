@@ -8,8 +8,8 @@ const UUID_PATTERN =
 
 const getSupabaseUrl = () => process.env.SUPABASE_URL || "";
 const getServiceKey = () =>
-  process.env.SUPABASE_SECRET_KEY ||
   process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.SUPABASE_SECRET_KEY ||
   "";
 
 const SECURITY_HEADERS = {
@@ -124,7 +124,12 @@ const getProject = async ({ publicKey, version }) => {
       "Content-Type": "application/json",
     },
   });
-  if (!upstream.ok) return { ok: false, status: 502 };
+  if (!upstream.ok) {
+    console.warn("[portfolio-content] project lookup failed", {
+      status: upstream.status,
+    });
+    return { ok: false, status: 502 };
+  }
   const rows = await upstream.json();
   const project = Array.isArray(rows) ? rows[0] : null;
   if (!project) return { ok: false, status: 404 };

@@ -677,6 +677,10 @@ const loadMessageTemplates = () => {
 };
 
 export default function App() {
+  useEffect(() => {
+    document.title = "OBLIX CRM";
+  }, []);
+
   const devPreview =
     import.meta.env.DEV &&
     new URLSearchParams(window.location.search).has("preview");
