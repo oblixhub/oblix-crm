@@ -29,6 +29,7 @@ import {
   type Stage,
 } from "../types";
 import { ContactActions } from "./ContactActions";
+import { WhatsAppEditor } from "./WhatsAppEditor";
 
 const activityIcons = {
   validation: UserRoundCheck,
@@ -56,6 +57,7 @@ interface LeadDetailProps {
   onCopyPreviewLink: () => void;
   onMarkPaid: () => void;
   onOpenMessages: () => void;
+  onWhatsAppChange: (number: string | null) => void;
 }
 
 export function LeadDetail({
@@ -74,6 +76,7 @@ export function LeadDetail({
   onCopyPreviewLink,
   onMarkPaid,
   onOpenMessages,
+  onWhatsAppChange,
 }: LeadDetailProps) {
   const [note, setNote] = useState("");
   const visibleStages: readonly Stage[] =
@@ -124,6 +127,11 @@ export function LeadDetail({
         </div>
         <div className="lead-header-actions">
           <ContactActions lead={lead} onOpenMessages={onOpenMessages} />
+          <WhatsAppEditor
+            compact
+            lead={lead}
+            onSave={onWhatsAppChange}
+          />
           <button
             className="button validation-discard"
             onClick={() => void onDeleteLead(lead.id)}

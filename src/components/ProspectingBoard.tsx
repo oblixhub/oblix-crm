@@ -27,6 +27,7 @@ import type {
   WeekDay,
 } from "../types";
 import { ContactActions } from "./ContactActions";
+import { WhatsAppEditor } from "./WhatsAppEditor";
 
 const outcomes: Array<{
   value: ProspectingOutcome;
@@ -37,8 +38,8 @@ const outcomes: Array<{
 }> = [
   {
     value: "Mensagem enviada",
-    label: "Mensagem enviada",
-    description: "Contato realizado",
+    label: "Contato realizado",
+    description: "Mensagem enviada; aguardar resposta",
     icon: Send,
     tone: "green",
   },
@@ -126,6 +127,7 @@ interface ProspectingBoardProps {
   onPriorityChange: (id: number, priority: Priority) => void;
   onOwnerChange: (id: number, owner: Owner) => void;
   onInitialMessageSent: (id: number, sent: boolean) => void;
+  onWhatsAppChange: (id: number, number: string | null) => void;
   onSaveOutcome: (
     id: number,
     outcome: ProspectingOutcome,
@@ -144,6 +146,7 @@ export function ProspectingBoard({
   onPriorityChange,
   onOwnerChange,
   onInitialMessageSent,
+  onWhatsAppChange,
   onSaveOutcome,
 }: ProspectingBoardProps) {
   const [restoredWorkspace] = useState(loadProspectingWorkspace);
@@ -425,9 +428,20 @@ export function ProspectingBoard({
                     {lead.stage} · {lead.batchName}
                   </small>
                 </span>
-                {lead.initialMessageSent ? (
-                  <i className="message-badge">Mensagem enviada</i>
-                ) : null}
+                <i
+                  className={`message-badge ${
+                    lead.initialMessageSent ? "is-sent" : "is-pending"
+                  }`}
+                >
+                  {lead.initialMessageSent ? (
+                    <Check size={12} />
+                  ) : (
+                    <Clock3 size={12} />
+                  )}
+                  <span>
+                    {lead.initialMessageSent ? "Contatado" : "Não contatado"}
+                  </span>
+                </i>
                 {lead.overdue ? (
                   <em>Atrasado</em>
                 ) : (
@@ -505,20 +519,42 @@ export function ProspectingBoard({
                 <span>Etapa</span>
                 <strong>{selectedLead.stage}</strong>
               </label>
-              <label className="initial-message-toggle">
-                <span>Mensagem inicial</span>
-                <button
-                  type="button"
-                  className={`button button--quiet ${initialMessageSent ? "button--success" : ""}`}
-                  onClick={() => {
-                    const next = !initialMessageSent;
-                    setInitialMessageSent(next);
-                    onInitialMessageSent(selectedLead.id, next);
-                  }}
-                >
-                  {initialMessageSent ? "Enviada" : "Não enviada"}
-                </button>
-              </label>
+              <fieldset className="initial-message-status">
+                <legend>Mensagem inicial</legend>
+                <div role="group" aria-label="Status da mensagem inicial">
+                  <button
+                    type="button"
+                    className={!initialMessageSent ? "active is-pending" : ""}
+                    aria-pressed={!initialMessageSent}
+                    onClick={() => {
+                      if (!initialMessageSent) return;
+                      setInitialMessageSent(false);
+                      onInitialMessageSent(selectedLead.id, false);
+                    }}
+                  >
+                    <Clock3 size={15} />
+                    Não enviada
+                  </button>
+                  <button
+                    type="button"
+                    className={initialMessageSent ? "active is-sent" : ""}
+                    aria-pressed={initialMessageSent}
+                    onClick={() => {
+                      if (initialMessageSent) return;
+                      setInitialMessageSent(true);
+                      onInitialMessageSent(selectedLead.id, true);
+                    }}
+                  >
+                    <Check size={15} />
+                    Enviada
+                  </button>
+                </div>
+                <small aria-live="polite">
+                  {initialMessageSent
+                    ? "Contato já realizado por alguém da equipe."
+                    : "Ainda precisa receber a primeira mensagem."}
+                </small>
+              </fieldset>
               <label>
                 <span>Lote</span>
                 <strong className="context-batch">
@@ -541,6 +577,12 @@ export function ProspectingBoard({
 
             <div className="context-contact">
               <span>Canais de contato</span>
+              <WhatsAppEditor
+                lead={selectedLead}
+                onSave={(number) =>
+                  onWhatsAppChange(selectedLead.id, number)
+                }
+              />
               <ContactActions
                 lead={selectedLead}
                 onOpenMessages={() => onOpenMessages(selectedLead.id)}

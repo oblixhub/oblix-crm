@@ -235,6 +235,7 @@ type DbLead = {
   offer_suggestion: string | null;
   has_whatsapp: boolean;
   whatsapp_url?: string | null;
+  whatsapp_number?: string | null;
   validation_status: "pending" | "valid" | "discarded";
   professional_evidence: string | null;
   owner: string | null;
@@ -310,7 +311,13 @@ const mapDbLead = (row: DbLead, index: number): Lead => ({
   dueTime: "A definir",
   siteStatus: row.site_status === "Tem site" ? "Tem site" : row.site_status === "Sem site" ? "Sem site" : "Não verificado",
   instagramUrl: row.profile_url,
-  whatsappUrl: row.whatsapp_url ?? undefined,
+  whatsappUrl:
+    row.whatsapp_url ??
+    (row.whatsapp_number ? `https://wa.me/${row.whatsapp_number}` : undefined),
+  whatsappNumber:
+    row.whatsapp_number ??
+    row.whatsapp_url?.match(/(?:wa\.me\/|phone=)(\d{8,15})/i)?.[1] ??
+    undefined,
   offer: row.offer_suggestion?.toLowerCase().includes("domínio") ? "Com domínio" : "Sem domínio",
   amount: row.offer_suggestion?.toLowerCase().includes("domínio") ? 250 : 200,
   paymentStatus: "Não aprovado",
@@ -357,6 +364,8 @@ const toDbPatch = (lead: Lead) => ({
   preview_site_url: lead.preview.siteUrl ?? null,
   preview_source_path: lead.preview.sourcePath ?? null,
   prospecting_done: lead.initialMessageSent,
+  has_whatsapp: Boolean(lead.whatsappUrl),
+  whatsapp_url: lead.whatsappUrl ?? null,
   updated_at: new Date().toISOString(),
 });
 
@@ -726,6 +735,29 @@ export default function App() {
       ...lead,
       initialMessageSent,
     }));
+    showToast(
+      initialMessageSent
+        ? "Mensagem inicial marcada como enviada."
+        : "Lead marcado como ainda não contatado.",
+    );
+  };
+
+  const updateWhatsAppNumber = (
+    leadId: number,
+    whatsappNumber: string | null,
+  ) => {
+    updateLead(leadId, (lead) => ({
+      ...lead,
+      whatsappNumber: whatsappNumber ?? undefined,
+      whatsappUrl: whatsappNumber
+        ? `https://wa.me/${whatsappNumber}`
+        : undefined,
+    }));
+    showToast(
+      whatsappNumber
+        ? "WhatsApp salvo no lead."
+        : "WhatsApp removido do lead.",
+    );
   };
 
   const saveLeadPatch = async (lead: Lead) => {
@@ -1759,6 +1791,9 @@ export default function App() {
         onCopyPreviewLink={copyPreviewLink}
         onMarkPaid={markPaid}
         onOpenMessages={() => openMessages()}
+        onWhatsAppChange={(number) =>
+          updateWhatsAppNumber(selectedLead.id, number)
+        }
       />
     );
   } else if (activeNav === "dashboard") {
@@ -1803,6 +1838,7 @@ export default function App() {
         onPriorityChange={changePriority}
         onOwnerChange={changeOwner}
         onInitialMessageSent={setInitialMessageSent}
+        onWhatsAppChange={updateWhatsAppNumber}
         onSaveOutcome={saveProspectingOutcome}
       />
     );
