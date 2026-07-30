@@ -1,21 +1,22 @@
 import {
   AlertCircle,
-  ArrowLeft,
   ArrowRight,
   CalendarDays,
   CalendarRange,
   CheckSquare2,
   ChevronDown,
-  Clock3,
   Import,
+  Layers3,
   ListFilter,
+  MessageCircleMore,
   Plus,
   Search,
   UserRoundCog,
   UsersRound,
 } from "lucide-react";
 import { useDeferredValue, useMemo, useState } from "react";
-import type { Lead, Owner, Priority, Stage, WeekDay } from "../types";
+import { ALL_BATCHES, getBatchNames, matchesBatch } from "../lib/leads";
+import { ownerLabels, type Lead, type Owner, type Priority, type Stage, type WeekDay } from "../types";
 import { LeadCard, ownerName } from "./LeadCard";
 
 type DayFilter = WeekDay | "Atrasados" | "Todos";
@@ -45,9 +46,15 @@ interface DashboardProps {
   onImport: () => void;
   onOpenMessages: (leadId: number) => void;
   onPriorityChange: (leadId: number, priority: Priority) => void;
+  onDelete?: (id: number) => void | Promise<void>;
+  deletingLeadId?: number | null;
   onBulkOwner: (leadIds: number[], owner: Owner) => void;
   onBulkStage: (leadIds: number[], stage: Stage) => void;
   onBulkSchedule: (leadIds: number[], day: WeekDay) => void;
+  ownerOptions: Owner[];
+  dailyTarget: number;
+  canManageSettings: boolean;
+  onDailyTargetChange: (target: number) => void;
 }
 
 export function Dashboard({
@@ -57,18 +64,26 @@ export function Dashboard({
   onImport,
   onOpenMessages,
   onPriorityChange,
+  onDelete,
+  deletingLeadId,
   onBulkOwner,
   onBulkStage,
   onBulkSchedule,
+  ownerOptions,
+  dailyTarget,
+  canManageSettings,
+  onDailyTargetChange,
 }: DashboardProps) {
   const [activeDay, setActiveDay] = useState<DayFilter>("Hoje");
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
   const [owner, setOwner] = useState<Owner | "Todos">("Todos");
+  const [batch, setBatch] = useState<string>(ALL_BATCHES);
   const [stage, setStage] = useState<Stage | "Todos">("Todos");
   const [priority, setPriority] = useState<Priority | "Todas">("Todas");
   const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set());
   const [page, setPage] = useState(1);
+  const batches = useMemo(() => getBatchNames(leads), [leads]);
 
   const counts = useMemo(() => {
     const result: Record<DayFilter, number> = {
@@ -105,6 +120,7 @@ export function Dashboard({
         return (
           dayMatches &&
           queryMatches &&
+          matchesBatch(lead, batch) &&
           (owner === "Todos" || lead.owner === owner) &&
           (stage === "Todos" || lead.stage === stage) &&
           (priority === "Todas" || lead.priority === priority)
@@ -112,11 +128,13 @@ export function Dashboard({
       })
       .sort(
         (a, b) =>
+          Number(!["Interessado", "Materiais"].includes(a.stage)) -
+            Number(!["Interessado", "Materiais"].includes(b.stage)) ||
           Number(Boolean(b.overdue)) - Number(Boolean(a.overdue)) ||
           priorityWeight[a.priority] - priorityWeight[b.priority] ||
           a.dueTime.localeCompare(b.dueTime),
       );
-  }, [activeDay, deferredQuery, leads, owner, priority, stage]);
+  }, [activeDay, batch, deferredQuery, leads, owner, priority, stage]);
 
   const pageSize = 24;
   const totalPages = Math.max(1, Math.ceil(filteredLeads.length / pageSize));
@@ -132,29 +150,43 @@ export function Dashboard({
   ).length;
   const activeFilterCount =
     Number(Boolean(query.trim())) +
+    Number(batch !== ALL_BATCHES) +
     Number(owner !== "Todos") +
     Number(stage !== "Todos") +
     Number(priority !== "Todas");
 
-  const team = [
-    {
-      name: "Hugo",
-      total: leads.filter((lead) => lead.owner === "Você").length,
-      today: leads.filter(
-        (lead) => lead.owner === "Você" && lead.scheduleDay === "Hoje",
-      ).length,
-    },
-    {
-      name: "Raiza",
-      total: leads.filter((lead) => lead.owner === "Sócia").length,
-      today: leads.filter(
-        (lead) => lead.owner === "Sócia" && lead.scheduleDay === "Hoje",
-      ).length,
-    },
-  ];
+  const team = ownerOptions.map((name) => ({
+    name: ownerLabels[name] ?? name,
+    total: leads.filter((lead) => lead.owner === name).length,
+    today: leads.filter(
+      (lead) => lead.owner === name && lead.scheduleDay === "Hoje",
+    ).length,
+  }));
+  const repliesNow = leads.filter((lead) =>
+    ["Interessado", "Materiais"].includes(lead.stage),
+  ).length;
+  const followUpsToday = leads.filter(
+    (lead) =>
+      lead.initialMessageSent &&
+      (lead.scheduleDay === "Hoje" || lead.overdue),
+  ).length;
+  const newContactsToday = leads.filter(
+    (lead) => !lead.initialMessageSent && lead.scheduleDay === "Hoje",
+  ).length;
+  const contactsCompletedToday = leads.filter((lead) =>
+    lead.activities.some(
+      (activity) =>
+        activity.title === "Mensagem enviada" &&
+        ((activity.occurredAt &&
+          new Date(activity.occurredAt).toDateString() ===
+            new Date().toDateString()) ||
+          activity.time.startsWith("Hoje")),
+    ),
+  ).length;
 
   const clearFilters = () => {
     setQuery("");
+    setBatch(ALL_BATCHES);
     setOwner("Todos");
     setStage("Todos");
     setPriority("Todas");
@@ -179,18 +211,30 @@ export function Dashboard({
           <h1>Fila de hoje</h1>
           <p>Veja o que precisa de atenção e avance um contato por vez.</p>
         </div>
-        <div className="week-switcher" aria-label="Semana atual">
-          <button aria-label="Semana anterior">
-            <ArrowLeft size={18} />
-          </button>
+        <div className="week-switcher" aria-label="Fila atual">
           <span>
             <CalendarRange size={18} />
-            Semana atual
+            Fila atual
           </span>
-          <button aria-label="Próxima semana">
-            <ArrowRight size={18} />
-          </button>
         </div>
+        {canManageSettings && (
+          <label className="daily-goal-control">
+            <span>Meta diária da equipe</span>
+            <input
+              type="number"
+              min="1"
+              max="200"
+              defaultValue={dailyTarget}
+              onBlur={(event) =>
+                onDailyTargetChange(Number(event.target.value))
+              }
+              onKeyDown={(event) => {
+                if (event.key === "Enter") event.currentTarget.blur();
+              }}
+              aria-label="Meta diária da equipe"
+            />
+          </label>
+        )}
         <div className="operations-heading-actions">
           <button className="button button--primary" onClick={onNewLead}>
             <Plus size={19} />
@@ -214,7 +258,7 @@ export function Dashboard({
             <span>Próxima ação recomendada</span>
             <strong>{nextLead.nextAction}</strong>
             <small>
-              {nextLead.handle} · {ownerName(nextLead.owner)}
+              {nextLead.handle} · {nextLead.batchName} · {ownerName(nextLead.owner)}
               {nextLead.overdue ? " · Está atrasado" : ` · ${nextLead.dueTime}`}
             </small>
           </div>
@@ -259,32 +303,25 @@ export function Dashboard({
             </span>
           </div>
         ))}
-        <div className="team-member-load is-future">
-          <Plus size={18} />
-          <span>
-            <strong>Próximo vendedor</strong>
-            <small>Capacidade pronta para crescer</small>
-          </span>
-        </div>
       </section>
 
       <section className="operations-summary" aria-label="Resumo operacional">
         <SummaryItem
-          icon={Clock3}
-          value={String(counts.Hoje)}
-          label="ações para hoje"
+          icon={MessageCircleMore}
+          value={String(repliesNow)}
+          label="respostas e interessados"
           tone="blue"
         />
         <SummaryItem
           icon={AlertCircle}
-          value={String(counts.Atrasados)}
-          label="atrasadas"
+          value={String(followUpsToday)}
+          label="follow-ups para fazer"
           tone="amber"
         />
         <SummaryItem
           icon={CalendarDays}
-          value={String(leads.length)}
-          label="leads ativos"
+          value={`${contactsCompletedToday}/${dailyTarget}`}
+          label={`${newContactsToday} novos disponíveis`}
           tone="purple"
         />
       </section>
@@ -346,10 +383,22 @@ export function Dashboard({
               />
             </label>
             <FilterSelect
+              label="Lote"
+              value={batch}
+              onChange={(value) => {
+                setBatch(value);
+                setPage(1);
+              }}
+              options={[ALL_BATCHES, ...batches]}
+            />
+            <FilterSelect
               label="Responsável"
               value={owner}
               onChange={(value) => setOwner(value as Owner | "Todos")}
-              options={["Todos", "Você", "Sócia"]}
+              options={["Todos", ...ownerOptions]}
+              formatOption={(option) =>
+                option === "Todos" ? option : ownerLabels[option as Owner]
+              }
             />
             <FilterSelect
               label="Etapa"
@@ -384,18 +433,44 @@ export function Dashboard({
               <strong>{selectedIds.size}</strong> selecionados
             </span>
             <i />
-            <button onClick={() => onBulkOwner(selected, "Sócia")}>
-              <UserRoundCog size={18} />
-              Passar para Raiza
+            {ownerOptions
+              .filter((item) => item !== "Equipe")
+              .map((item) => (
+                <button key={item} onClick={() => onBulkOwner(selected, item)}>
+                  <UserRoundCog size={18} />
+                  Passar para {ownerLabels[item] ?? item}
+                </button>
+              ))}
+            <button onClick={() => onBulkOwner(selected, "Equipe")}>
+              <Layers3 size={18} />
+              Deixar com a equipe
             </button>
             <button onClick={() => onBulkStage(selected, "Contatar")}>
               <ArrowRight size={18} />
               Mover para Contatar
             </button>
-            <button onClick={() => onBulkSchedule(selected, "Ter")}>
+            <label className="bulk-schedule-select">
               <CalendarDays size={18} />
-              Reagendar
-            </button>
+              <select
+                aria-label="Reagendar selecionados"
+                defaultValue=""
+                onChange={(event) => {
+                  if (!event.target.value) return;
+                  onBulkSchedule(selected, event.target.value as WeekDay);
+                  event.target.value = "";
+                }}
+              >
+                <option value="" disabled>
+                  Reagendar…
+                </option>
+                <option value="Hoje">Hoje</option>
+                <option value="Seg">Segunda</option>
+                <option value="Ter">Terça</option>
+                <option value="Qua">Quarta</option>
+                <option value="Qui">Quinta</option>
+                <option value="Sex">Sexta</option>
+              </select>
+            </label>
             <button
               className="bulk-clear"
               onClick={() => setSelectedIds(new Set())}
@@ -414,6 +489,8 @@ export function Dashboard({
               onSelect={() => onSelectLead(lead.id)}
               onOpenMessages={() => onOpenMessages(lead.id)}
               onPriorityChange={(next) => onPriorityChange(lead.id, next)}
+              onDelete={onDelete}
+              deleteDisabled={deletingLeadId === lead.id}
               onSelectionChange={(checked) =>
                 setSelectedIds((current) => {
                   const next = new Set(current);
@@ -494,11 +571,13 @@ function FilterSelect({
   label,
   value,
   options,
+  formatOption,
   onChange,
 }: {
   label: string;
   value: string;
   options: readonly string[];
+  formatOption?: (option: string) => string;
   onChange: (value: string) => void;
 }) {
   return (
@@ -507,7 +586,7 @@ function FilterSelect({
       <span>
         <select value={value} onChange={(event) => onChange(event.target.value)}>
           {options.map((option) => (
-            <option key={option}>{option}</option>
+            <option key={option}>{formatOption?.(option) ?? option}</option>
           ))}
         </select>
         <ChevronDown size={16} />

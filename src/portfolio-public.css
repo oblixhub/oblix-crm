@@ -1,0 +1,754 @@
+.portfolio-public-page,
+.featured-portfolio {
+  --portfolio-black: #000000;
+  --portfolio-white: #ffffff;
+  --portfolio-lime: #c8ff3d;
+  --portfolio-muted: #a5a5a5;
+  --portfolio-line: rgba(255, 255, 255, 0.2);
+  background: var(--portfolio-black);
+  color: var(--portfolio-white);
+  font-family: var(--font-geist), "Oblix Geist", Arial, sans-serif;
+}
+
+.portfolio-public-page {
+  min-height: 100svh;
+  overflow: clip;
+}
+
+.portfolio-public-header {
+  display: flex;
+  min-height: 6.25rem;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.35rem var(--page-gutter);
+  border-bottom: 1px solid var(--portfolio-line);
+  background: var(--portfolio-black);
+}
+
+.portfolio-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  line-height: 0;
+}
+
+.portfolio-brand-symbol {
+  display: grid;
+  width: 2.85rem;
+  place-items: center;
+}
+
+.portfolio-brand-symbol img {
+  width: 100%;
+  filter: invert(1);
+}
+
+.portfolio-brand-wordmark {
+  width: 6.8rem;
+  height: auto;
+  filter: brightness(0) invert(1);
+}
+
+.portfolio-desktop-nav {
+  display: flex;
+  align-items: center;
+  gap: clamp(1.5rem, 2.8vw, 3rem);
+}
+
+.portfolio-desktop-nav > a {
+  font-size: 0.95rem;
+  font-weight: 610;
+  text-decoration: none;
+}
+
+.portfolio-desktop-nav > a:not(.portfolio-header-cta):hover {
+  color: var(--portfolio-lime);
+}
+
+.portfolio-header-cta {
+  min-height: 3.25rem;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 1.35rem;
+  background: var(--portfolio-lime);
+  color: var(--portfolio-black);
+  font-weight: 760 !important;
+}
+
+.portfolio-gallery-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(17rem, 0.55fr);
+  gap: 4rem;
+  align-items: end;
+  padding: clamp(5rem, 10vw, 10rem) var(--page-gutter)
+    clamp(3rem, 6vw, 6rem);
+}
+
+.portfolio-gallery-hero h1,
+.portfolio-case-copy h1,
+.featured-portfolio-heading h2,
+.portfolio-footer-cta h2 {
+  margin: 0;
+  font-family: var(--font-big-shoulders), "Oblix Big Shoulders", sans-serif;
+  font-weight: 760;
+  letter-spacing: -0.045em;
+  text-transform: uppercase;
+}
+
+.portfolio-gallery-hero h1 {
+  max-width: 13ch;
+  font-size: clamp(4.25rem, 8.8vw, 9.8rem);
+  line-height: 0.82;
+}
+
+.portfolio-gallery-hero p {
+  max-width: 34rem;
+  margin: 0 0 0.8rem;
+  color: #c8c8c8;
+  font-size: clamp(1.08rem, 1.45vw, 1.35rem);
+  line-height: 1.55;
+}
+
+.portfolio-gallery {
+  padding: 0 var(--page-gutter) clamp(6rem, 11vw, 11rem);
+}
+
+.portfolio-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: clamp(1.4rem, 3vw, 3rem);
+  padding: 1.3rem 0 2.5rem;
+  border-top: 1px solid var(--portfolio-line);
+}
+
+.portfolio-filters button {
+  min-height: 2.8rem;
+  padding: 0;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: #9e9e9e;
+  cursor: pointer;
+  font-size: 0.88rem;
+  font-weight: 720;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.portfolio-filters button:hover,
+.portfolio-filters button.is-active {
+  border-bottom-color: var(--portfolio-lime);
+  color: var(--portfolio-white);
+}
+
+.portfolio-gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(2rem, 4vw, 5rem) clamp(1.25rem, 2vw, 2.5rem);
+}
+
+.portfolio-gallery-card,
+.featured-project {
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+
+.portfolio-gallery-card.is-wide {
+  grid-column: span 2;
+}
+
+.portfolio-gallery-cover,
+.featured-project-cover,
+.portfolio-case-cover {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  border: 1px solid var(--portfolio-line);
+  background: #0c0c0c;
+}
+
+.portfolio-gallery-cover {
+  aspect-ratio: 16 / 10;
+}
+
+.portfolio-gallery-card.is-wide .portfolio-gallery-cover {
+  aspect-ratio: 2 / 1;
+}
+
+.portfolio-gallery-cover picture,
+.portfolio-gallery-cover img,
+.featured-project-cover picture,
+.featured-project-cover img,
+.portfolio-case-cover picture,
+.portfolio-case-cover img {
+  width: 100%;
+  height: 100%;
+}
+
+.portfolio-gallery-cover img,
+.featured-project-cover img,
+.portfolio-case-cover img {
+  object-fit: cover;
+  transition: transform 500ms cubic-bezier(0.2, 0.7, 0, 1);
+}
+
+.portfolio-gallery-card:hover img,
+.featured-project:hover img {
+  transform: scale(1.025);
+}
+
+.portfolio-cover-fallback {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-height: 18rem;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: clamp(1.5rem, 4vw, 4rem);
+  background:
+    linear-gradient(135deg, transparent 62%, rgba(200, 255, 61, 0.11) 62%),
+    #0c0c0c;
+}
+
+.portfolio-cover-fallback span {
+  max-width: 11ch;
+  font-family: var(--font-big-shoulders), "Oblix Big Shoulders", sans-serif;
+  font-size: clamp(3rem, 6vw, 7rem);
+  font-weight: 760;
+  line-height: 0.82;
+  text-transform: uppercase;
+}
+
+.portfolio-cover-fallback small {
+  color: var(--portfolio-lime);
+  font-size: 0.8rem;
+  font-weight: 720;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.portfolio-gallery-meta,
+.featured-project-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding: 1.2rem 0 0;
+}
+
+.portfolio-gallery-meta > span,
+.featured-project-meta > span {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.portfolio-gallery-meta strong,
+.featured-project-meta strong {
+  font-size: clamp(1.1rem, 1.4vw, 1.35rem);
+}
+
+.portfolio-gallery-meta small,
+.featured-project-meta small {
+  color: var(--portfolio-muted);
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.portfolio-gallery-meta svg,
+.featured-project-meta svg {
+  width: 1.8rem;
+  height: 1.8rem;
+  color: var(--portfolio-lime);
+  transition: transform 180ms ease;
+}
+
+.portfolio-gallery-card:hover svg,
+.featured-project:hover svg {
+  transform: translate(0.2rem, -0.2rem);
+}
+
+.portfolio-empty-public {
+  min-height: 25rem;
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  border-top: 1px solid var(--portfolio-line);
+}
+
+.portfolio-empty-public h2 {
+  max-width: 15ch;
+  margin: 0 0 1rem;
+  font-family: var(--font-big-shoulders), "Oblix Big Shoulders", sans-serif;
+  font-size: clamp(3.5rem, 7vw, 7rem);
+  line-height: 0.88;
+  text-transform: uppercase;
+}
+
+.portfolio-empty-public p,
+.portfolio-public-message {
+  color: var(--portfolio-muted);
+  font-size: 1.1rem;
+}
+
+.portfolio-public-message {
+  padding: 3rem var(--page-gutter);
+}
+
+.portfolio-footer-cta {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(18rem, 0.48fr);
+  gap: 3rem;
+  padding: clamp(5rem, 10vw, 10rem) var(--page-gutter);
+  border-top: 1px solid var(--portfolio-line);
+}
+
+.portfolio-footer-cta h2 {
+  max-width: 10ch;
+  font-size: clamp(4.2rem, 8vw, 9rem);
+  line-height: 0.82;
+}
+
+.portfolio-footer-cta p {
+  align-self: end;
+  margin: 0;
+  color: #c4c4c4;
+  font-size: 1.15rem;
+  line-height: 1.55;
+}
+
+.portfolio-footer-cta a {
+  grid-column: 2;
+  display: inline-flex;
+  min-height: 3.6rem;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1.25rem;
+  background: var(--portfolio-lime);
+  color: var(--portfolio-black);
+  font-weight: 780;
+  text-decoration: none;
+}
+
+.portfolio-back-link {
+  display: inline-flex;
+  min-height: 3rem;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 2rem var(--page-gutter) 0;
+  color: #b8b8b8;
+  font-size: 0.9rem;
+  font-weight: 670;
+  text-decoration: none;
+}
+
+.portfolio-back-link:hover {
+  color: var(--portfolio-white);
+}
+
+.portfolio-case-hero {
+  display: grid;
+  grid-template-columns: minmax(22rem, 0.72fr) minmax(0, 1.28fr);
+  gap: clamp(2.5rem, 5vw, 6rem);
+  align-items: center;
+  padding: clamp(4rem, 7vw, 7rem) var(--page-gutter)
+    clamp(4rem, 8vw, 8rem);
+}
+
+.portfolio-case-copy h1 {
+  max-width: 9ch;
+  font-size: clamp(4.5rem, 8vw, 9rem);
+  line-height: 0.82;
+}
+
+.portfolio-case-copy > span {
+  display: block;
+  margin: 1.2rem 0 1.8rem;
+  color: var(--portfolio-lime);
+  font-size: 0.82rem;
+  font-weight: 740;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.portfolio-case-copy > p {
+  max-width: 35rem;
+  margin: 0;
+  color: #c8c8c8;
+  font-size: clamp(1.05rem, 1.4vw, 1.25rem);
+  line-height: 1.58;
+}
+
+.portfolio-case-copy ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.3rem;
+  margin: 2rem 0 0;
+  padding: 1.3rem 0 0;
+  border-top: 1px solid var(--portfolio-line);
+  list-style: none;
+}
+
+.portfolio-case-copy li {
+  color: #adadad;
+  font-size: 0.9rem;
+}
+
+.portfolio-case-cover {
+  min-height: 31rem;
+  aspect-ratio: 16 / 11;
+  transform: perspective(1200px) rotateY(-2deg);
+  transform-origin: center left;
+}
+
+.portfolio-case-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 2.3rem;
+}
+
+.portfolio-case-actions button,
+.portfolio-case-actions a {
+  display: inline-flex;
+  min-height: 3.55rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  padding: 0 1.2rem;
+  border: 1px solid var(--portfolio-white);
+  background: transparent;
+  color: var(--portfolio-white);
+  cursor: pointer;
+  font-weight: 740;
+  text-decoration: none;
+}
+
+.portfolio-case-actions button {
+  border-color: var(--portfolio-lime);
+  background: var(--portfolio-lime);
+  color: var(--portfolio-black);
+}
+
+.portfolio-case-story {
+  display: grid;
+  min-height: 28rem;
+  place-items: center;
+  padding: 4rem var(--page-gutter);
+  border-top: 1px solid var(--portfolio-line);
+  border-bottom: 1px solid var(--portfolio-line);
+}
+
+.portfolio-case-story p {
+  max-width: 22ch;
+  margin: 0;
+  font-family: var(--font-big-shoulders), "Oblix Big Shoulders", sans-serif;
+  font-size: clamp(3rem, 6vw, 7rem);
+  font-weight: 680;
+  line-height: 0.9;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.portfolio-site-viewer {
+  padding: clamp(3rem, 6vw, 6rem) var(--page-gutter);
+}
+
+.portfolio-site-viewer header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 2rem;
+  margin-bottom: 1.5rem;
+}
+
+.portfolio-site-viewer h2 {
+  margin: 0 0 0.35rem;
+  font-family: var(--font-big-shoulders), "Oblix Big Shoulders", sans-serif;
+  font-size: clamp(2.8rem, 5vw, 5rem);
+  line-height: 0.9;
+  text-transform: uppercase;
+}
+
+.portfolio-site-viewer p {
+  margin: 0;
+  color: var(--portfolio-muted);
+}
+
+.portfolio-site-viewer button {
+  min-height: 3rem;
+  padding: 0 1rem;
+  border: 1px solid var(--portfolio-line);
+  background: transparent;
+  color: var(--portfolio-white);
+  cursor: pointer;
+}
+
+.portfolio-site-viewer iframe {
+  width: 100%;
+  min-height: min(75rem, 82svh);
+  border: 1px solid var(--portfolio-line);
+  background: #ffffff;
+}
+
+.portfolio-next-project {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.45rem 2rem;
+  align-items: center;
+  padding: clamp(3rem, 6vw, 6rem) var(--page-gutter);
+  border-top: 1px solid var(--portfolio-line);
+  color: inherit;
+  text-decoration: none;
+}
+
+.portfolio-next-project span {
+  color: var(--portfolio-muted);
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.portfolio-next-project strong {
+  grid-column: 1;
+  font-family: var(--font-big-shoulders), "Oblix Big Shoulders", sans-serif;
+  font-size: clamp(3.5rem, 7vw, 7rem);
+  line-height: 0.9;
+  text-transform: uppercase;
+}
+
+.portfolio-next-project svg {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  width: 3rem;
+  height: 3rem;
+  color: var(--portfolio-lime);
+}
+
+.featured-portfolio {
+  padding: clamp(5rem, 10vw, 10rem) var(--page-gutter);
+  border-top: 1px solid var(--portfolio-line);
+}
+
+.featured-portfolio-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 3rem;
+  margin-bottom: clamp(2.5rem, 5vw, 5rem);
+}
+
+.featured-portfolio-heading h2 {
+  max-width: 9ch;
+  font-size: clamp(4.5rem, 8vw, 9rem);
+  line-height: 0.82;
+}
+
+.featured-portfolio-heading > a {
+  display: inline-flex;
+  min-height: 3.55rem;
+  align-items: center;
+  gap: 1.3rem;
+  padding: 0 1.25rem;
+  background: var(--portfolio-lime);
+  color: var(--portfolio-black);
+  font-weight: 760;
+  text-decoration: none;
+}
+
+.featured-portfolio-grid {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr;
+  gap: 2rem 1rem;
+}
+
+.featured-project.is-primary {
+  grid-row: span 2;
+}
+
+.featured-project-cover {
+  aspect-ratio: 16 / 10;
+}
+
+.featured-project.is-primary .featured-project-cover {
+  height: calc(100% - 4.3rem);
+  min-height: 38rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .portfolio-gallery-cover img,
+  .featured-project-cover img,
+  .portfolio-gallery-meta svg,
+  .featured-project-meta svg {
+    transition: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .portfolio-desktop-nav {
+    display: none;
+  }
+
+  .portfolio-public-header .mobile-navigation {
+    display: block;
+  }
+
+  .portfolio-gallery-hero,
+  .portfolio-footer-cta,
+  .portfolio-case-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .portfolio-gallery-hero {
+    gap: 2rem;
+  }
+
+  .portfolio-gallery-hero h1 {
+    max-width: 11ch;
+  }
+
+  .portfolio-footer-cta a {
+    grid-column: 1;
+  }
+
+  .portfolio-case-cover {
+    grid-row: 1;
+    min-height: 26rem;
+    transform: none;
+  }
+
+  .featured-portfolio-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .featured-project.is-primary {
+    grid-row: auto;
+  }
+
+  .featured-project.is-primary .featured-project-cover {
+    height: auto;
+    min-height: 0;
+    aspect-ratio: 16 / 10;
+  }
+}
+
+@media (max-width: 680px) {
+  .portfolio-public-header {
+    min-height: 4.8rem;
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+  }
+
+  .portfolio-brand-symbol {
+    width: 2.25rem;
+  }
+
+  .portfolio-brand-wordmark {
+    width: 5.7rem;
+  }
+
+  .portfolio-gallery-hero {
+    padding-top: 4rem;
+  }
+
+  .portfolio-gallery-hero h1 {
+    font-size: clamp(3.9rem, 19vw, 6rem);
+  }
+
+  .portfolio-gallery-hero p {
+    font-size: 1.02rem;
+  }
+
+  .portfolio-gallery-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .portfolio-gallery-card.is-wide {
+    grid-column: auto;
+  }
+
+  .portfolio-gallery-card.is-wide .portfolio-gallery-cover,
+  .portfolio-gallery-cover {
+    aspect-ratio: 4 / 3;
+  }
+
+  .portfolio-cover-fallback {
+    min-height: 16rem;
+  }
+
+  .portfolio-filters {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .portfolio-filters::-webkit-scrollbar {
+    display: none;
+  }
+
+  .portfolio-filters button {
+    flex: none;
+  }
+
+  .portfolio-footer-cta h2,
+  .featured-portfolio-heading h2 {
+    font-size: clamp(3.8rem, 18vw, 5.7rem);
+  }
+
+  .portfolio-footer-cta {
+    gap: 2rem;
+  }
+
+  .portfolio-case-hero {
+    padding-top: 3rem;
+  }
+
+  .portfolio-case-copy h1 {
+    font-size: clamp(4rem, 19vw, 6.2rem);
+  }
+
+  .portfolio-case-cover {
+    min-height: 0;
+    aspect-ratio: 4 / 5;
+  }
+
+  .portfolio-case-actions,
+  .portfolio-case-actions button,
+  .portfolio-case-actions a {
+    width: 100%;
+  }
+
+  .portfolio-site-viewer header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .portfolio-site-viewer iframe {
+    min-height: 76svh;
+  }
+
+  .portfolio-next-project {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .featured-portfolio {
+    padding-top: 5rem;
+    padding-bottom: 5rem;
+  }
+
+  .featured-portfolio-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .featured-portfolio-heading > a {
+    justify-content: space-between;
+  }
+
+  .featured-project-cover,
+  .featured-project.is-primary .featured-project-cover {
+    aspect-ratio: 4 / 5;
+  }
+}

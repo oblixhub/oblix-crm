@@ -1,19 +1,46 @@
 /* OBLIX CRM vNext — monochrome brand system + restrained action green */
+@font-face {
+  font-family: "OBLIX Sans";
+  src: url("/fonts/Geist-Variable.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "OBLIX Display";
+  src: url("/fonts/BigShoulders-Variable.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+}
+
 :root {
-  --app-bg: #f4f4f4;
+  --app-bg: #f3f3f0;
   --app-surface: #ffffff;
-  --app-surface-2: #eeeeee;
-  --app-surface-3: #e8e8e8;
-  --app-text: #080808;
-  --app-muted: #666666;
-  --app-border: #dddddd;
-  --app-border-strong: #bdbdbd;
-  --app-green: #0baa62;
-  --app-green-strong: #078249;
-  --app-green-soft: #edf2ef;
+  --app-surface-2: #ededeb;
+  --app-surface-3: #e4e4e1;
+  --app-text: #050505;
+  --app-muted: #62625f;
+  --app-border: #d8d8d3;
+  --app-border-strong: #b9b9b3;
+  --app-green: #c8ff3d;
+  --app-green-strong: #3c5700;
+  --app-green-ink: #1f2d00;
+  --app-green-soft: #f1f7e4;
   --app-sidebar: #050505;
-  --app-sidebar-active: #151515;
+  --app-sidebar-active: #141414;
   --app-shadow: 0 18px 48px rgba(0, 0, 0, 0.08);
+  /* Keep legacy components on the same accessible brand tokens. */
+  --bg: var(--app-bg);
+  --surface: var(--app-surface);
+  --text: var(--app-text);
+  --muted: var(--app-muted);
+  --line: var(--app-border);
+  --line-strong: var(--app-border-strong);
+  --green: var(--app-green-strong);
+  --green-dark: var(--app-green-ink);
+  --green-soft: var(--app-green-soft);
 }
 
 :root[data-theme="dark"] {
@@ -25,9 +52,10 @@
   --app-muted: #a6a6a6;
   --app-border: #242424;
   --app-border-strong: #3b3b3b;
-  --app-green: #18c978;
-  --app-green-strong: #35d98d;
-  --app-green-soft: #111713;
+  --app-green: #c8ff3d;
+  --app-green-strong: #dcff81;
+  --app-green-ink: #050505;
+  --app-green-soft: #161c08;
   --app-sidebar: #000000;
   --app-sidebar-active: #121212;
   --app-shadow: 0 18px 48px rgba(0, 0, 0, 0.44);
@@ -47,7 +75,15 @@ html {
 }
 
 body {
+  font-family: "OBLIX Sans", "Segoe UI", Helvetica, Arial, sans-serif;
   overscroll-behavior-y: contain;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
 }
 
 button,

@@ -19,7 +19,20 @@ pnpm dev
 - Upload demonstrativo de ZIP;
 - Simulação da visão do cliente;
 - Aprovação, solicitação de ajustes e pagamento manual;
-- Dados mantidos somente no estado local do navegador.
+- Dados sincronizados com o Supabase quando o ambiente está configurado;
+- Autenticação da equipe e publicação de previews por ZIP.
 
-Supabase, processamento real de ZIP e autenticação serão conectados nas
-próximas etapas.
+## Extensão Chrome — OBLIX Lead Saver
+
+A pasta [`chrome-extension`](./chrome-extension) contém a extensão Manifest V3
+para captura manual de perfis do Instagram. Ela usa:
+
+- `GET /api/extension/health`;
+- `POST /api/extension/leads`;
+- tokens pessoais resolvidos somente no servidor;
+- a tabela existente `public.leads`;
+- o lote `Extensão Chrome`;
+- índice único do Instagram normalizado para bloquear duplicidade concorrente.
+
+Instalação, variáveis, geração de tokens e aplicação da migration estão em
+[`chrome-extension/README.md`](./chrome-extension/README.md).

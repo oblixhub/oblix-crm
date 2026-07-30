@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OBLIX Lead Saver</title>
+    <link rel="stylesheet" href="./popup.css" />
+  </head>
+  <body>
+    <main class="popup-shell">
+      <header class="brand-bar">
+        <div class="brand">
+          <img src="./icons/oblix-symbol.svg" alt="" />
+          <span>OBLIX</span>
+        </div>
+        <button id="open-options" class="icon-button" type="button" aria-label="Abrir configurações">
+          <span aria-hidden="true">•••</span>
+        </button>
+      </header>
+
+      <section class="intro">
+        <span class="eyebrow">Lead Saver</span>
+        <h1>Salvar no CRM</h1>
+        <p>Revise o contato antes de adicionar à fila.</p>
+      </section>
+
+      <div id="empty-state" class="empty-state" hidden>
+        <strong>Abra um perfil válido do Instagram.</strong>
+        <p>Use a extensão em uma página como instagram.com/nome-do-perfil/.</p>
+      </div>
+
+      <form id="lead-form" novalidate>
+        <section class="profile-card">
+          <span class="profile-avatar" id="profile-avatar">OB</span>
+          <div>
+            <small>Perfil detectado</small>
+            <strong id="profile-username">@perfil</strong>
+          </div>
+          <button id="discard-draft" class="text-button" type="button">Descartar</button>
+        </section>
+
+        <label class="field">
+          <span>WhatsApp <small>opcional</small></span>
+          <input
+            id="whatsapp"
+            name="whatsapp"
+            type="text"
+            inputmode="tel"
+            maxlength="500"
+            autocomplete="off"
+            placeholder="Número ou link wa.me"
+          />
+          <small id="whatsapp-feedback" class="field-feedback"></small>
+        </label>
+
+        <fieldset class="field">
+          <legend>Prioridade</legend>
+          <div class="segmented segmented--two">
+            <label>
+              <input type="radio" name="priority" value="normal" checked />
+              <span>Normal</span>
+            </label>
+            <label>
+              <input type="radio" name="priority" value="priority" />
+              <span>Prioridade</span>
+            </label>
+          </div>
+        </fieldset>
+
+        <fieldset class="field">
+          <legend>Possui site?</legend>
+          <div class="segmented segmented--three">
+            <label>
+              <input type="radio" name="website" value="unknown" checked />
+              <span>Não verificado</span>
+            </label>
+            <label>
+              <input type="radio" name="website" value="no" />
+              <span>Não</span>
+            </label>
+            <label>
+              <input type="radio" name="website" value="yes" />
+              <span>Sim</span>
+            </label>
+          </div>
+        </fieldset>
+
+        <label class="field">
+          <span>Observação <small>opcional</small></span>
+          <textarea
+            id="notes"
+            name="notes"
+            maxlength="1000"
+            rows="3"
+            placeholder="Ex.: perfil indicado por uma cliente"
+          ></textarea>
+        </label>
+
+        <div id="status" class="status" role="status" aria-live="polite" hidden></div>
+
+        <button id="save-lead" class="primary-button" type="submit">
+          <span>Salvar no CRM</span>
+          <span aria-hidden="true">→</span>
+        </button>
+        <small class="shortcut">Enter para salvar · rascunho expira em 30 min</small>
+      </form>
+    </main>
+
+    <script type="module" src="./popup.js"></script>
+  </body>
+</html>

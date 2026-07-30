@@ -12,10 +12,14 @@ import type { MessageTemplate } from "../types";
 
 interface MessageManagerProps {
   templates: MessageTemplate[];
-  onCreate: () => number;
-  onDuplicate: (id: number) => number;
-  onDelete: (id: number) => void;
-  onUpdate: (id: number, patch: Partial<MessageTemplate>) => void;
+  readOnly?: boolean;
+  onCreate: () => MessageTemplate["id"];
+  onDuplicate: (id: MessageTemplate["id"]) => MessageTemplate["id"];
+  onDelete: (id: MessageTemplate["id"]) => void;
+  onUpdate: (
+    id: MessageTemplate["id"],
+    patch: Partial<MessageTemplate>,
+  ) => void;
   onSaved: (title: string) => void;
   onCopied: (title: string) => void;
 }
@@ -28,8 +32,9 @@ export function MessageManager({
   onUpdate,
   onSaved,
   onCopied,
+  readOnly = false,
 }: MessageManagerProps) {
-  const [selectedId, setSelectedId] = useState<number | null>(
+  const [selectedId, setSelectedId] = useState<MessageTemplate["id"] | null>(
     templates[0]?.id ?? null,
   );
   const [activeCategory, setActiveCategory] = useState("Todas");
@@ -123,7 +128,7 @@ export function MessageManager({
           <h1>Mensagens prontas</h1>
           <p>Crie e mantenha os scripts usados pela equipe.</p>
         </div>
-        <button
+        {!readOnly && <button
           className="button button--primary"
           onClick={() => {
             const id = onCreate();
@@ -133,7 +138,7 @@ export function MessageManager({
         >
           <Plus size={18} />
           Nova mensagem
-        </button>
+        </button>}
       </header>
 
       <div className="message-manager-grid">
@@ -161,7 +166,7 @@ export function MessageManager({
               </strong>
             </button>
           ))}
-          {addingCategory ? (
+          {!readOnly && (addingCategory ? (
             <div className="new-category-form">
               <input
                 autoFocus
@@ -183,7 +188,7 @@ export function MessageManager({
               <Plus size={16} />
               Nova categoria
             </button>
-          )}
+          ))}
         </aside>
 
         <section className="message-template-list">
@@ -208,7 +213,7 @@ export function MessageManager({
                 }}
               >
                 <GripVertical className="drag-handle" size={18} />
-                <button
+                {!readOnly && <button
                   className={`favorite-button ${
                     template.favorite ? "active" : ""
                   }`}
@@ -223,7 +228,7 @@ export function MessageManager({
                   }}
                 >
                   <Star size={18} fill={template.favorite ? "currentColor" : "none"} />
-                </button>
+                </button>}
                 <span>
                   <strong>{template.title}</strong>
                   <small>
@@ -231,7 +236,7 @@ export function MessageManager({
                   </small>
                   <p>{template.message}</p>
                 </span>
-                <div>
+                {!readOnly && <div>
                   <button
                     aria-label={`Duplicar ${template.title}`}
                     onClick={(event) => {
@@ -255,7 +260,7 @@ export function MessageManager({
                   >
                     <Trash2 size={17} />
                   </button>
-                </div>
+                </div>}
               </article>
             ))}
             {visibleTemplates.length === 0 && (
@@ -285,6 +290,7 @@ export function MessageManager({
               <label className="editor-field">
                 <span>Título</span>
                 <input
+                  disabled={readOnly}
                   value={draft?.title ?? selected.title}
                   onChange={(event) => {
                     setDraft((current) =>
@@ -300,6 +306,7 @@ export function MessageManager({
               <label className="editor-field">
                 <span>Categoria</span>
                 <select
+                  disabled={readOnly}
                   value={draft?.category ?? selected.category}
                   onChange={(event) => {
                     setDraft((current) =>
@@ -322,6 +329,7 @@ export function MessageManager({
                   <small>{(draft?.message ?? selected.message).length}/2000</small>
                 </span>
                 <textarea
+                  readOnly={readOnly}
                   maxLength={2000}
                   value={draft?.message ?? selected.message}
                   onChange={(event) => {
@@ -335,7 +343,7 @@ export function MessageManager({
                 />
               </label>
 
-              <div className="variable-row">
+              {!readOnly && <div className="variable-row">
                 {["[nome]", "[seu nome]", "[perfil]", "[valor]"].map(
                   (variable) => (
                     <button key={variable} onClick={() => addVariable(variable)}>
@@ -343,9 +351,9 @@ export function MessageManager({
                     </button>
                   ),
                 )}
-              </div>
+              </div>}
 
-              <label className="shared-checkbox">
+              {!readOnly && <label className="shared-checkbox">
                 <input
                   type="checkbox"
                   checked={draft?.shared ?? selected.shared}
@@ -362,7 +370,7 @@ export function MessageManager({
                   <strong>Disponível para toda a equipe</strong>
                   <small>Você e sua sócia poderão usar esta mensagem.</small>
                 </span>
-              </label>
+              </label>}
 
               <div className="message-live-preview">
                 <header>
@@ -388,7 +396,7 @@ export function MessageManager({
                 </p>
               </div>
 
-              <footer>
+              {!readOnly && <footer>
                 <button
                   className="button button--secondary"
                   onClick={() => {
@@ -416,15 +424,15 @@ export function MessageManager({
                 >
                   Salvar alterações
                 </button>
-              </footer>
+              </footer>}
             </>
           ) : (
             <div className="message-editor-empty">
               <Plus size={24} />
               <h2>Crie sua primeira mensagem</h2>
-              <button className="button button--primary" onClick={onCreate}>
+              {!readOnly && <button className="button button--primary" onClick={onCreate}>
                 Nova mensagem
-              </button>
+              </button>}
             </div>
           )}
         </section>

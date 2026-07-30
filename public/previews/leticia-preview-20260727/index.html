@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Preview exclusivo | Leticia Lima</title>
+    <style>
+      :root { color-scheme: dark; font-family: Inter, Arial, sans-serif; }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: #090909; color: #fff; }
+      .gate { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; padding: 24px; background: #090909; }
+      .gate[hidden] { display: none; }
+      .gate-card { width: min(100%, 420px); padding: 32px; border: 1px solid #282828; border-radius: 24px; background: #111; box-shadow: 0 30px 100px rgba(0,0,0,.45); }
+      .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; letter-spacing: .14em; }
+      .brand-mark { color: #c7ff32; font-size: 22px; letter-spacing: -.35em; }
+      h1 { margin: 42px 0 10px; font-size: clamp(28px, 7vw, 42px); line-height: 1; }
+      p { margin: 0 0 28px; color: #a7a7a7; line-height: 1.55; }
+      label { display: grid; gap: 8px; margin-top: 16px; color: #d1d1d1; font-size: 13px; font-weight: 700; }
+      input { width: 100%; padding: 15px; border: 1px solid #363636; border-radius: 12px; outline: none; background: #181818; color: #fff; font: inherit; }
+      input:focus { border-color: #c7ff32; box-shadow: 0 0 0 3px rgba(199,255,50,.12); }
+      button { border: 0; border-radius: 12px; font: inherit; font-weight: 800; cursor: pointer; }
+      .submit { width: 100%; margin-top: 24px; padding: 15px; background: #c7ff32; color: #111; }
+      .error { min-height: 20px; margin: 12px 0 0; color: #ff8e8e; font-size: 13px; }
+      .preview { display: none; min-height: 100vh; }
+      .preview.is-open { display: block; }
+      iframe { display: block; width: 100%; height: 100vh; border: 0; background: #fff; }
+      .review-widget { position: fixed; z-index: 5; right: 18px; bottom: 18px; display: grid; gap: 8px; padding: 10px; border: 1px solid rgba(255,255,255,.18); border-radius: 18px; background: rgba(10,10,10,.92); box-shadow: 0 18px 60px rgba(0,0,0,.35); backdrop-filter: blur(16px); }
+      .review-widget span { padding: 2px 4px 5px; color: #e8e8e8; font-size: 12px; font-weight: 700; }
+      .review-actions { display: flex; gap: 8px; }
+      .review-actions button { min-height: 44px; padding: 10px 14px; color: #fff; background: #262626; }
+      .review-actions .approve { color: #111; background: #c7ff32; }
+      .notice { position: fixed; z-index: 12; right: 18px; bottom: 124px; max-width: 300px; padding: 12px 14px; border-radius: 12px; background: #fff; color: #111; font-size: 14px; font-weight: 700; box-shadow: 0 14px 40px rgba(0,0,0,.3); }
+      .notice[hidden] { display: none; }
+      @media (max-width: 560px) { .review-widget { right: 12px; bottom: 12px; left: 12px; } .review-actions button { flex: 1; } .notice { right: 12px; bottom: 122px; left: 12px; max-width: none; } }
+    </style>
+  </head>
+  <body>
+    <main id="gate" class="gate">
+      <form id="login-form" class="gate-card">
+        <div class="brand"><span class="brand-mark">✕✕</span> OBLIX</div>
+        <h1>Seu preview está pronto.</h1>
+        <p>Use o seu @ do Instagram como usuário e senha para visualizar o site.</p>
+        <label>Usuário <input id="username" autocomplete="username" placeholder="@letnutri_" required /></label>
+        <label>Senha <input id="password" type="password" autocomplete="current-password" placeholder="@letnutri_" required /></label>
+        <button class="submit" type="submit">Visualizar meu site</button>
+        <div id="error" class="error" role="alert"></div>
+      </form>
+    </main>
+
+    <main id="preview" class="preview">
+      <iframe title="Preview do site de Leticia Lima" src="/previews/leticia-preview-20260727/site.html"></iframe>
+      <aside class="review-widget" aria-label="Avaliação do preview">
+        <span>O que achou do seu site?</span>
+        <div class="review-actions">
+          <button id="revision" type="button">Pedir revisão</button>
+          <button id="approve" class="approve" type="button">Aprovar site</button>
+        </div>
+      </aside>
+    </main>
+    <div id="notice" class="notice" hidden role="status"></div>
+
+    <script>
+      const handle = "@letnutri_";
+      const endpoint = "https://xxvjmxjbqhbkesjcrudb.supabase.co/functions/v1/client-preview-action";
+      const normalize = (value) => `@${value.trim().replace(/^@+/, "").toLowerCase()}`;
+      const gate = document.getElementById("gate");
+      const preview = document.getElementById("preview");
+      const error = document.getElementById("error");
+      const notice = document.getElementById("notice");
+
+      const openPreview = () => {
+        gate.hidden = true;
+        preview.classList.add("is-open");
+      };
+
+      if (sessionStorage.getItem("oblix-preview-leticia") === "open") openPreview();
+
+      document.getElementById("login-form").addEventListener("submit", (event) => {
+        event.preventDefault();
+        const username = normalize(document.getElementById("username").value);
+        const password = normalize(document.getElementById("password").value);
+        if (username !== handle || password !== handle) {
+          error.textContent = "Confira o usuário e a senha informados.";
+          return;
+        }
+        sessionStorage.setItem("oblix-preview-leticia", "open");
+        openPreview();
+      });
+
+      const showNotice = (message) => {
+        notice.textContent = message;
+        notice.hidden = false;
+        window.setTimeout(() => { notice.hidden = true; }, 4500);
+      };
+
+      const submitAction = async (action, feedback = "") => {
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ handle, password: handle, action, feedback }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Não foi possível registrar a solicitação.");
+        showNotice(data.message);
+      };
+
+      document.getElementById("approve").addEventListener("click", async () => {
+        try { await submitAction("approve"); } catch (error) { showNotice(error.message); }
+      });
+      document.getElementById("revision").addEventListener("click", async () => {
+        const feedback = window.prompt("Conte o que você gostaria de ajustar:");
+        if (feedback === null) return;
+        try { await submitAction("revision", feedback); } catch (error) { showNotice(error.message); }
+      });
+    </script>
+  </body>
+</html>

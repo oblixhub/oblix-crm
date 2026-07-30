@@ -3,9 +3,16 @@ import {
   CalendarClock,
   Check,
   ExternalLink,
+  Trash2,
   Flag,
+  Layers3,
 } from "lucide-react";
-import type { Lead, Priority } from "../types";
+import {
+  leadSourceLabels,
+  ownerLabels,
+  type Lead,
+  type Priority,
+} from "../types";
 import { ContactActions } from "./ContactActions";
 import { StageBadge } from "./StageBadge";
 
@@ -16,12 +23,14 @@ interface LeadCardProps {
   onPriorityChange: (priority: Priority) => void;
   selected?: boolean;
   onSelectionChange?: (selected: boolean) => void;
+  onDelete?: (id: number) => void | Promise<void>;
+  deleteDisabled?: boolean;
 }
 
 const priorities: Priority[] = ["Urgente", "Alta", "Normal", "Baixa"];
 
 export function ownerName(owner: Lead["owner"]) {
-  return owner === "Você" ? "Hugo" : "Raiza";
+  return ownerLabels[owner] ?? owner;
 }
 
 function leadInitials(handle: string) {
@@ -58,6 +67,8 @@ export function LeadCard({
   onPriorityChange,
   selected = false,
   onSelectionChange,
+  onDelete,
+  deleteDisabled = false,
 }: LeadCardProps) {
   const initials = leadInitials(lead.handle);
 
@@ -97,6 +108,13 @@ export function LeadCard({
         </button>
 
         <div className="lead-card-meta">
+          <span className="batch-chip" title={`Origem: ${lead.batchName}`}>
+            <Layers3 size={13} />
+            {lead.batchName}
+          </span>
+          <span className="source-chip">
+            {leadSourceLabels[lead.sourceType]}
+          </span>
           <label
             className={`priority-control priority-${lead.priority.toLowerCase()}`}
             onClick={(event) => event.stopPropagation()}
@@ -132,15 +150,43 @@ export function LeadCard({
         </button>
 
         <footer className="lead-card-footer" aria-label={`Ações de ${lead.handle}`}>
-          <ContactActions
-            lead={lead}
-            compact
-            onOpenMessages={onOpenMessages}
-          />
+        {lead.tags.length > 0 && (
+          <span className="lead-card-tags" aria-label="Tags do lead">
+            {lead.tags.slice(0, 2).map((tag) => (
+              <i
+                key={tag.id}
+                style={{ borderColor: tag.color }}
+                title={tag.name}
+              >
+                {tag.name}
+              </i>
+            ))}
+            {lead.tags.length > 2 && <i>+{lead.tags.length - 2}</i>}
+          </span>
+        )}
+        <ContactActions
+          lead={lead}
+          compact
+          onOpenMessages={onOpenMessages}
+        />
+        {onDelete ? (
           <button
-            className="quick-contact quick-contact--open"
-            onClick={onSelect}
-            aria-label={`Abrir ficha de ${lead.handle}`}
+            className="quick-contact quick-contact--danger"
+            onClick={(event) => {
+              event.stopPropagation();
+              void onDelete(lead.id);
+            }}
+            disabled={deleteDisabled}
+            title="Excluir lead permanentemente"
+            aria-label={`Excluir ${lead.handle} permanentemente`}
+          >
+            <Trash2 size={14} />
+          </button>
+        ) : null}
+        <button
+          className="quick-contact quick-contact--open"
+          onClick={onSelect}
+          aria-label={`Abrir ficha de ${lead.handle}`}
             title="Abrir ficha completa"
           >
             <ExternalLink size={18} />

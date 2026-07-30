@@ -1,6 +1,15 @@
 import { Search, SlidersHorizontal } from "lucide-react";
 import { useDeferredValue, useMemo, useState } from "react";
-import type { Lead, Priority, Stage } from "../types";
+import { ALL_BATCHES, getBatchNames, matchesBatch } from "../lib/leads";
+import {
+  leadSourceLabels,
+  type Lead,
+  type LeadTag,
+  type LeadSource,
+  type Owner,
+  type Priority,
+  type Stage,
+} from "../types";
 import { LeadCard } from "./LeadCard";
 
 interface LeadDirectoryProps {
@@ -8,6 +17,10 @@ interface LeadDirectoryProps {
   onSelectLead: (id: number) => void;
   onOpenMessages: (id: number) => void;
   onPriorityChange: (id: number, priority: Priority) => void;
+  onDelete?: (id: number) => void | Promise<void>;
+  deletingLeadId?: number | null;
+  ownerOptions: Owner[];
+  availableTags: LeadTag[];
 }
 
 export function LeadDirectory({
@@ -15,12 +28,24 @@ export function LeadDirectory({
   onSelectLead,
   onOpenMessages,
   onPriorityChange,
+  onDelete,
+  deletingLeadId,
+  ownerOptions,
+  availableTags,
 }: LeadDirectoryProps) {
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
   const [stage, setStage] = useState<Stage | "Todas">("Todas");
   const [priority, setPriority] = useState<Priority | "Todas">("Todas");
+  const [source, setSource] = useState<LeadSource | "Todas">("Todas");
+  const [batch, setBatch] = useState<string>(ALL_BATCHES);
+  const [owner, setOwner] = useState<Owner | "Todos">("Todos");
+  const [tagId, setTagId] = useState("Todas");
+  const [lifecycle, setLifecycle] = useState<
+    "Ativos" | "Encerrados" | "Não contatar" | "Todos"
+  >("Ativos");
   const [visibleCount, setVisibleCount] = useState(48);
+  const batches = useMemo(() => getBatchNames(leads), [leads]);
 
   const results = useMemo(() => {
     const normalized = deferredQuery.toLowerCase().trim();
@@ -32,14 +57,32 @@ export function LeadDirectory({
             lead.category.toLowerCase().includes(normalized) ||
             lead.nextAction.toLowerCase().includes(normalized)) &&
           (stage === "Todas" || lead.stage === stage) &&
-          (priority === "Todas" || lead.priority === priority),
+          (priority === "Todas" || lead.priority === priority) &&
+          (source === "Todas" || lead.sourceType === source) &&
+          (owner === "Todos" || lead.owner === owner) &&
+          (tagId === "Todas" || lead.tags.some((tag) => tag.id === tagId)) &&
+          (lifecycle === "Todos" ||
+            (lifecycle === "Ativos" && !lead.archived && !lead.doNotContact) ||
+            (lifecycle === "Encerrados" && Boolean(lead.archived)) ||
+            (lifecycle === "Não contatar" && lead.doNotContact)) &&
+          matchesBatch(lead, batch),
       )
       .sort(
         (a, b) =>
           Number(Boolean(b.overdue)) - Number(Boolean(a.overdue)) ||
           a.handle.localeCompare(b.handle),
       );
-  }, [deferredQuery, leads, priority, stage]);
+  }, [
+    batch,
+    deferredQuery,
+    leads,
+    lifecycle,
+    owner,
+    priority,
+    source,
+    stage,
+    tagId,
+  ]);
 
   return (
     <div className="standard-page refined-standard-page">
@@ -70,6 +113,83 @@ export function LeadDirectory({
           <SlidersHorizontal size={18} />
           Filtros
         </div>
+        <select
+          aria-label="Filtrar por situação"
+          value={lifecycle}
+          onChange={(event) => {
+            setLifecycle(
+              event.target.value as
+                | "Ativos"
+                | "Encerrados"
+                | "Não contatar"
+                | "Todos",
+            );
+            setVisibleCount(48);
+          }}
+        >
+          <option>Ativos</option>
+          <option>Encerrados</option>
+          <option>Não contatar</option>
+          <option>Todos</option>
+        </select>
+        <select
+          aria-label="Filtrar por lote"
+          value={batch}
+          onChange={(event) => {
+            setBatch(event.target.value);
+            setVisibleCount(48);
+          }}
+        >
+          <option>{ALL_BATCHES}</option>
+          {batches.map((batchName) => (
+            <option key={batchName}>{batchName}</option>
+          ))}
+        </select>
+        <select
+          aria-label="Filtrar por responsável"
+          value={owner}
+          onChange={(event) => {
+            setOwner(event.target.value as Owner | "Todos");
+            setVisibleCount(48);
+          }}
+        >
+          <option value="Todos">Todos os responsáveis</option>
+          {ownerOptions.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label="Filtrar por tag"
+          value={tagId}
+          onChange={(event) => {
+            setTagId(event.target.value);
+            setVisibleCount(48);
+          }}
+        >
+          <option value="Todas">Todas as tags</option>
+          {availableTags.map((tag) => (
+            <option key={tag.id} value={tag.id}>
+              {tag.name}
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label="Filtrar por origem"
+          value={source}
+          onChange={(event) => {
+            setSource(event.target.value as LeadSource | "Todas");
+            setVisibleCount(48);
+          }}
+        >
+          <option value="Todas">Todas as origens</option>
+          {Object.entries(leadSourceLabels).map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
         <select
           aria-label="Filtrar por etapa"
           value={stage}
@@ -110,6 +230,8 @@ export function LeadDirectory({
             onSelect={() => onSelectLead(lead.id)}
             onOpenMessages={() => onOpenMessages(lead.id)}
             onPriorityChange={(next) => onPriorityChange(lead.id, next)}
+            onDelete={onDelete}
+            deleteDisabled={deletingLeadId === lead.id}
           />
         ))}
         {results.length === 0 && (

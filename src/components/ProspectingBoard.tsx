@@ -7,7 +7,9 @@ import {
   Clock3,
   ExternalLink,
   Flag,
+  Globe2,
   Instagram,
+  Layers3,
   MessageCircleMore,
   Play,
   Search,
@@ -15,14 +17,19 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { ALL_BATCHES, getBatchNames, matchesBatch } from "../lib/leads";
+import { ownerLabels } from "../types";
 import type {
   Lead,
+  LeadTag,
   Owner,
   Priority,
   ProspectingOutcome,
   WeekDay,
 } from "../types";
 import { ContactActions } from "./ContactActions";
+import { TagEditor } from "./TagEditor";
+import { WhatsAppEditor } from "./WhatsAppEditor";
 
 const outcomes: Array<{
   value: ProspectingOutcome;
@@ -33,8 +40,8 @@ const outcomes: Array<{
 }> = [
   {
     value: "Mensagem enviada",
-    label: "Mensagem enviada",
-    description: "Contato realizado",
+    label: "Contato realizado",
+    description: "Mensagem enviada; aguardar resposta",
     icon: Send,
     tone: "green",
   },
@@ -66,6 +73,20 @@ const outcomes: Array<{
     icon: CalendarClock,
     tone: "amber",
   },
+  {
+    value: "Já possui site",
+    label: "Já possui site",
+    description: "Não prospectar agora",
+    icon: Globe2,
+    tone: "gray",
+  },
+  {
+    value: "Não contatar",
+    label: "Não contatar",
+    description: "Bloquear novas abordagens",
+    icon: CircleX,
+    tone: "red",
+  },
 ];
 
 const nextActions = [
@@ -84,11 +105,44 @@ const priorityWeight: Record<Priority, number> = {
   Baixa: 3,
 };
 
+const PROSPECTING_WORKSPACE_STORAGE_KEY = "oblix-crm-prospecting-workspace-v1";
+
+type ProspectingWorkspace = {
+  ownerView?: Owner | "Todos";
+  batch?: string;
+  priority?: Priority | "Todas";
+  onlyUncontacted?: boolean;
+  selectedHandle?: string | null;
+  query?: string;
+};
+
+const loadProspectingWorkspace = (): ProspectingWorkspace => {
+  try {
+    const saved = window.sessionStorage.getItem(
+      PROSPECTING_WORKSPACE_STORAGE_KEY,
+    );
+    if (!saved) return {};
+    const parsed = JSON.parse(saved) as ProspectingWorkspace;
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
 interface ProspectingBoardProps {
   leads: Lead[];
   onSelectLead: (id: number) => void;
   onOpenMessages: (id: number) => void;
   onPriorityChange: (id: number, priority: Priority) => void;
+  onOwnerChange: (id: number, owner: Owner) => void;
+  onInitialMessageSent: (id: number, sent: boolean) => void;
+  onWhatsAppChange: (id: number, number: string | null) => void;
+  ownerOptions: Owner[];
+  dailyTarget: number;
+  availableTags: LeadTag[];
+  canCreateTags: boolean;
+  onToggleTag: (leadId: number, tag: LeadTag) => void;
+  onCreateTag: (name: string, category: string) => Promise<LeadTag | null>;
   onSaveOutcome: (
     id: number,
     outcome: ProspectingOutcome,
@@ -96,6 +150,7 @@ interface ProspectingBoardProps {
     day: WeekDay,
     time: string,
     note: string,
+    initialMessageSent: boolean,
   ) => void;
 }
 
@@ -104,18 +159,97 @@ export function ProspectingBoard({
   onSelectLead,
   onOpenMessages,
   onPriorityChange,
+  onOwnerChange,
+  onInitialMessageSent,
+  onWhatsAppChange,
+  ownerOptions,
+  dailyTarget,
+  availableTags,
+  canCreateTags,
+  onToggleTag,
+  onCreateTag,
   onSaveOutcome,
 }: ProspectingBoardProps) {
-  const [ownerView, setOwnerView] = useState<Owner | "Equipe">("Você");
-  const [query, setQuery] = useState("");
-  const [priority, setPriority] = useState<Priority | "Todas">("Todas");
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [restoredWorkspace] = useState(loadProspectingWorkspace);
+  const [ownerView, setOwnerView] = useState<Owner | "Todos">(
+    () => restoredWorkspace.ownerView ?? "Todos",
+  );
+  const [query, setQuery] = useState(() => restoredWorkspace.query ?? "");
+  const [priority, setPriority] = useState<Priority | "Todas">(
+    () => restoredWorkspace.priority ?? "Todas",
+  );
+  const [batch, setBatch] = useState(
+    () => restoredWorkspace.batch ?? ALL_BATCHES,
+  );
+  const [selectedHandle, setSelectedHandle] = useState<string | null>(
+    () => restoredWorkspace.selectedHandle ?? null,
+  );
+  const [onlyUncontacted, setOnlyUncontacted] = useState(
+    () => restoredWorkspace.onlyUncontacted ?? false,
+  );
   const [selectedOutcome, setSelectedOutcome] =
     useState<ProspectingOutcome>("Mensagem enviada");
   const [nextAction, setNextAction] = useState("Enviar mensagem de follow-up");
   const [scheduleDay, setScheduleDay] = useState<WeekDay>("Ter");
   const [time, setTime] = useState("10:00");
   const [note, setNote] = useState("");
+  const [initialMessageSent, setInitialMessageSent] = useState(false);
+  const batches = useMemo(() => getBatchNames(leads), [leads]);
+  const completedToday = useMemo(
+    () =>
+      leads.filter((lead) =>
+        lead.activities.some(
+          (activity) =>
+            ((activity.occurredAt &&
+              new Date(activity.occurredAt).toDateString() ===
+                new Date().toDateString()) ||
+              activity.time.startsWith("Hoje")) &&
+            outcomes.some((outcome) => outcome.value === activity.title),
+        ),
+      ).length,
+    [leads],
+  );
+  const dailyProgress = Math.min(
+    100,
+    Math.round((completedToday / dailyTarget) * 100),
+  );
+
+  useEffect(() => {
+    try {
+      window.sessionStorage.setItem(
+        PROSPECTING_WORKSPACE_STORAGE_KEY,
+        JSON.stringify({
+          ownerView,
+          batch,
+          priority,
+          selectedHandle,
+          onlyUncontacted,
+          query,
+        }),
+      );
+    } catch {
+      // The board remains usable if browser storage is unavailable.
+    }
+  }, [
+    batch,
+    ownerView,
+    priority,
+    selectedHandle,
+    onlyUncontacted,
+    query,
+  ]);
+
+  useEffect(() => {
+    if (batch !== ALL_BATCHES && !batches.includes(batch)) {
+      setBatch(ALL_BATCHES);
+    }
+  }, [batch, batches]);
+
+  useEffect(() => {
+    if (ownerView !== "Todos" && !ownerOptions.includes(ownerView)) {
+      setOwnerView("Todos");
+    }
+  }, [ownerOptions, ownerView]);
 
   const queue = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -125,8 +259,11 @@ export function ProspectingBoard({
           ["Contatar", "Interessado", "Materiais"].includes(
             lead.stage,
           ) &&
-          (ownerView === "Equipe" || lead.owner === ownerView) &&
+          !lead.doNotContact &&
+          (ownerView === "Todos" || lead.owner === ownerView) &&
+          matchesBatch(lead, batch) &&
           (priority === "Todas" || lead.priority === priority) &&
+          (!onlyUncontacted || !lead.initialMessageSent) &&
           (!normalized ||
             lead.handle.toLowerCase().includes(normalized) ||
             lead.category.toLowerCase().includes(normalized)),
@@ -137,14 +274,30 @@ export function ProspectingBoard({
           priorityWeight[a.priority] - priorityWeight[b.priority] ||
           a.dueTime.localeCompare(b.dueTime),
       );
-  }, [leads, ownerView, priority, query]);
+  }, [batch, leads, ownerView, priority, query, onlyUncontacted]);
 
-  const activeId =
-    selectedId && queue.some((lead) => lead.id === selectedId)
-      ? selectedId
-      : queue[0]?.id;
-  const selectedLead = queue.find((lead) => lead.id === activeId);
-  const selectedIndex = queue.findIndex((lead) => lead.id === activeId);
+  const activeHandle =
+    selectedHandle && queue.some((lead) => lead.handle === selectedHandle)
+      ? selectedHandle
+      : queue[0]?.handle;
+  const selectedLead = queue.find((lead) => lead.handle === activeHandle);
+  const selectedIndex = queue.findIndex(
+    (lead) => lead.handle === activeHandle,
+  );
+
+  useEffect(() => {
+    if (selectedLead && selectedLead.handle !== selectedHandle) {
+      setSelectedHandle(selectedLead.handle);
+    }
+  }, [selectedHandle, selectedLead?.handle]);
+
+  useEffect(() => {
+    if (!selectedLead) {
+      setInitialMessageSent(false);
+      return;
+    }
+    setInitialMessageSent(selectedLead.initialMessageSent);
+  }, [selectedLead?.id, selectedLead?.initialMessageSent]);
 
   const moveSelection = useCallback(
     (direction: -1 | 1) => {
@@ -156,7 +309,7 @@ export function ProspectingBoard({
               queue.length - 1,
               Math.max(0, selectedIndex + direction),
             );
-      setSelectedId(queue[nextIndex].id);
+      setSelectedHandle(queue[nextIndex].handle);
     },
     [queue, selectedIndex],
   );
@@ -181,10 +334,35 @@ export function ProspectingBoard({
       scheduleDay,
       time,
       note,
+      initialMessageSent || selectedOutcome === "Mensagem enviada",
     );
     const nextLead = queue[selectedIndex + 1] ?? queue[0];
-    setSelectedId(nextLead?.id ?? null);
+    setSelectedHandle(nextLead?.handle ?? null);
     setNote("");
+    setSelectedOutcome("Mensagem enviada");
+    setNextAction("Enviar mensagem de follow-up");
+    setScheduleDay("Ter");
+    setTime("10:00");
+  };
+
+  const setFollowUpPreset = (offset: number | "monday") => {
+    const target = new Date();
+    if (offset === "monday") {
+      const delta = ((8 - target.getDay()) % 7) || 7;
+      target.setDate(target.getDate() + delta);
+    } else {
+      target.setDate(target.getDate() + offset);
+      if (target.getDay() === 0) target.setDate(target.getDate() + 1);
+      if (target.getDay() === 6) target.setDate(target.getDate() + 2);
+    }
+    const dayMap: Partial<Record<number, WeekDay>> = {
+      1: "Seg",
+      2: "Ter",
+      3: "Qua",
+      4: "Qui",
+      5: "Sex",
+    };
+    setScheduleDay(dayMap[target.getDay()] ?? "Seg");
   };
 
   return (
@@ -196,27 +374,27 @@ export function ProspectingBoard({
         </div>
         <div className="daily-progress">
           <span>
-            <strong>14</strong> de 20 contatos hoje
+            <strong>{completedToday}</strong> de {dailyTarget} contatos hoje
           </span>
           <i>
-            <span />
+            <span style={{ width: `${dailyProgress}%` }} />
           </i>
-          <small>70%</small>
+          <small>{dailyProgress}%</small>
         </div>
         <div className="owner-switch" aria-label="Visualização da fila">
-          {(["Você", "Sócia", "Equipe"] as const).map((item) => (
+          {(["Todos", ...ownerOptions] as const).map((item) => (
             <button
               key={item}
               className={ownerView === item ? "active" : ""}
               onClick={() => setOwnerView(item)}
             >
-              {item === "Você" ? "Minha fila" : item}
+              {item === "Todos" ? "Todos" : ownerLabels[item] ?? item}
             </button>
           ))}
         </div>
         <button
           className="button button--primary start-next"
-          onClick={() => setSelectedId(queue[0]?.id ?? null)}
+          onClick={() => setSelectedHandle(queue[0]?.handle ?? null)}
         >
           <Play size={17} fill="currentColor" />
           Iniciar próximo lead
@@ -225,9 +403,16 @@ export function ProspectingBoard({
 
       <div className="prospecting-filters">
         <label>
-          <CalendarClock size={17} />
-          <select aria-label="Semana">
-            <option>20–24 jul</option>
+          <Layers3 size={17} />
+          <select
+            aria-label="Filtrar lote"
+            value={batch}
+            onChange={(event) => setBatch(event.target.value)}
+          >
+            <option>{ALL_BATCHES}</option>
+            {batches.map((batchName) => (
+              <option key={batchName}>{batchName}</option>
+            ))}
           </select>
           <ChevronDown size={15} />
         </label>
@@ -256,6 +441,14 @@ export function ProspectingBoard({
             placeholder="Buscar por @handle ou segmento"
           />
         </label>
+        <label className="prospecting-filter-checkbox">
+          <input
+            type="checkbox"
+            checked={onlyUncontacted}
+            onChange={(event) => setOnlyUncontacted(event.target.checked)}
+          />
+          <span>Apenas nao contatados ainda</span>
+        </label>
       </div>
 
       <div className="prospecting-grid">
@@ -265,13 +458,13 @@ export function ProspectingBoard({
             <span>{queue.length} leads</span>
           </header>
           <div className="prospecting-queue-list">
-            {queue.slice(0, 24).map((lead) => (
+            {queue.map((lead) => (
               <button
                 key={lead.id}
-                className={`${lead.id === activeId ? "active" : ""} ${
+                className={`${lead.handle === activeHandle ? "active" : ""} ${
                   lead.overdue ? "overdue" : ""
                 }`}
-                onClick={() => setSelectedId(lead.id)}
+                onClick={() => setSelectedHandle(lead.handle)}
               >
                 <Flag
                   className={`queue-priority priority-${lead.priority.toLowerCase()}`}
@@ -281,8 +474,24 @@ export function ProspectingBoard({
                 <time>{lead.dueTime}</time>
                 <span>
                   <strong>{lead.handle}</strong>
-                  <small>{lead.stage}</small>
+                  <small>
+                    {lead.stage} · {lead.batchName}
+                  </small>
                 </span>
+                <i
+                  className={`message-badge ${
+                    lead.initialMessageSent ? "is-sent" : "is-pending"
+                  }`}
+                >
+                  {lead.initialMessageSent ? (
+                    <Check size={12} />
+                  ) : (
+                    <Clock3 size={12} />
+                  )}
+                  <span>
+                    {lead.initialMessageSent ? "Contatado" : "Não contatado"}
+                  </span>
+                </i>
                 {lead.overdue ? (
                   <em>Atrasado</em>
                 ) : (
@@ -323,7 +532,21 @@ export function ProspectingBoard({
             <div className="context-meta">
               <label>
                 <span>Responsável</span>
-                <strong>{selectedLead.owner}</strong>
+                <select
+                  value={selectedLead.owner}
+                  onChange={(event) =>
+                    onOwnerChange(
+                      selectedLead.id,
+                      event.target.value as Owner,
+                    )
+                  }
+                >
+                  {ownerOptions.map((owner) => (
+                    <option key={owner} value={owner}>
+                      {ownerLabels[owner] ?? owner}
+                    </option>
+                  ))}
+                </select>
               </label>
               <label>
                 <span>Prioridade</span>
@@ -346,6 +569,49 @@ export function ProspectingBoard({
                 <span>Etapa</span>
                 <strong>{selectedLead.stage}</strong>
               </label>
+              <fieldset className="initial-message-status">
+                <legend>Mensagem inicial</legend>
+                <div role="group" aria-label="Status da mensagem inicial">
+                  <button
+                    type="button"
+                    className={!initialMessageSent ? "active is-pending" : ""}
+                    aria-pressed={!initialMessageSent}
+                    onClick={() => {
+                      if (!initialMessageSent) return;
+                      setInitialMessageSent(false);
+                      onInitialMessageSent(selectedLead.id, false);
+                    }}
+                  >
+                    <Clock3 size={15} />
+                    Não enviada
+                  </button>
+                  <button
+                    type="button"
+                    className={initialMessageSent ? "active is-sent" : ""}
+                    aria-pressed={initialMessageSent}
+                    onClick={() => {
+                      if (initialMessageSent) return;
+                      setInitialMessageSent(true);
+                      onInitialMessageSent(selectedLead.id, true);
+                    }}
+                  >
+                    <Check size={15} />
+                    Enviada
+                  </button>
+                </div>
+                <small aria-live="polite">
+                  {initialMessageSent
+                    ? "Contato já realizado por alguém da equipe."
+                    : "Ainda precisa receber a primeira mensagem."}
+                </small>
+              </fieldset>
+              <label>
+                <span>Lote</span>
+                <strong className="context-batch">
+                  <Layers3 size={14} />
+                  {selectedLead.batchName}
+                </strong>
+              </label>
             </div>
 
             <div className="context-next-action">
@@ -361,11 +627,25 @@ export function ProspectingBoard({
 
             <div className="context-contact">
               <span>Canais de contato</span>
+              <WhatsAppEditor
+                lead={selectedLead}
+                onSave={(number) =>
+                  onWhatsAppChange(selectedLead.id, number)
+                }
+              />
               <ContactActions
                 lead={selectedLead}
                 onOpenMessages={() => onOpenMessages(selectedLead.id)}
               />
             </div>
+            <TagEditor
+              compact
+              selected={selectedLead.tags}
+              available={availableTags}
+              onToggle={(tag) => onToggleTag(selectedLead.id, tag)}
+              onCreate={onCreateTag}
+              canCreate={canCreateTags}
+            />
 
             <div className="context-activity">
               <header>
@@ -435,6 +715,10 @@ export function ProspectingBoard({
                       setNextAction("Retomar contato");
                     if (outcome.value === "Não interessado")
                       setNextAction("Encerrar lead");
+                    if (outcome.value === "Já possui site")
+                      setNextAction("Nenhuma ação necessária");
+                    if (outcome.value === "Não contatar")
+                      setNextAction("Nenhuma ação necessária");
                   }}
                 >
                   <i>
@@ -453,6 +737,10 @@ export function ProspectingBoard({
             <span>Próxima ação</span>
             <select
               value={nextAction}
+              disabled={
+                selectedOutcome === "Já possui site" ||
+                selectedOutcome === "Não contatar"
+              }
               onChange={(event) => setNextAction(event.target.value)}
             >
               {nextActions.map((action) => (
@@ -466,6 +754,10 @@ export function ProspectingBoard({
               <span>Dia</span>
               <select
                 value={scheduleDay}
+                disabled={
+                  selectedOutcome === "Já possui site" ||
+                  selectedOutcome === "Não contatar"
+                }
                 onChange={(event) =>
                   setScheduleDay(event.target.value as WeekDay)
                 }
@@ -483,9 +775,24 @@ export function ProspectingBoard({
               <input
                 type="time"
                 value={time}
+                disabled={
+                  selectedOutcome === "Já possui site" ||
+                  selectedOutcome === "Não contatar"
+                }
                 onChange={(event) => setTime(event.target.value)}
               />
             </label>
+          </div>
+          <div className="follow-up-presets" aria-label="Atalhos de agenda">
+            <button type="button" onClick={() => setFollowUpPreset(1)}>
+              Amanhã
+            </button>
+            <button type="button" onClick={() => setFollowUpPreset(2)}>
+              Em 2 dias
+            </button>
+            <button type="button" onClick={() => setFollowUpPreset("monday")}>
+              Próxima segunda
+            </button>
           </div>
 
           <button

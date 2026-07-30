@@ -146,7 +146,8 @@ const makePreview = (
   status,
   version: status === "none" ? undefined : 1,
   fileName: status === "none" ? undefined : `${slug}.zip`,
-  publicSlug: slug,
+  requiresLogin: false,
+  publicSlug: status === "none" ? undefined : `${slug}-d3m0o`,
   checklist: {
     index: status !== "none",
     relativePaths: status !== "none",
@@ -181,6 +182,7 @@ export const initialLeads: Lead[] = Array.from({ length: 86 }, (_, index) => {
   return {
     id: index + 1,
     handle,
+    initialMessageSent: false,
     validationStatus,
     batchName: "Lote de demonstração",
     sourceType: "excel",
@@ -201,6 +203,9 @@ export const initialLeads: Lead[] = Array.from({ length: 86 }, (_, index) => {
     amount: index % 4 === 0 ? 250 : 200,
     paymentStatus:
       stage === "Aprovação" ? "Aguardando PIX" : "Não aprovado",
+    tags: [],
+    contactPermission: "public_contact",
+    doNotContact: false,
     activities: baseActivities.slice(
       0,
       Math.max(1, Math.min(baseActivities.length, stages.indexOf(stage) + 1)),

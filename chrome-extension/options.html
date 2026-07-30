@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Configurar OBLIX Lead Saver</title>
+    <link rel="stylesheet" href="./options.css" />
+  </head>
+  <body>
+    <main class="options-page">
+      <header class="options-header">
+        <div class="brand">
+          <img src="./icons/oblix-symbol.svg" alt="" />
+          <span>OBLIX</span>
+        </div>
+        <div>
+          <span class="eyebrow">Lead Saver</span>
+          <h1>Configurações</h1>
+          <p>Use um token diferente para cada integrante da equipe.</p>
+        </div>
+      </header>
+
+      <form id="options-form" class="settings-card">
+        <label>
+          <span>URL da API do CRM</span>
+          <input
+            id="api-base-url"
+            type="url"
+            required
+            placeholder="https://sites.oblixhub.com"
+          />
+          <small>Em produção, use https://sites.oblixhub.com</small>
+        </label>
+
+        <label>
+          <span>Token pessoal</span>
+          <input
+            id="token"
+            type="password"
+            autocomplete="new-password"
+            placeholder="Cole o token recebido"
+          />
+          <small id="token-state">Token configurado: não configurado</small>
+        </label>
+
+        <div class="settings-grid">
+          <label>
+            <span>Código do país</span>
+            <input id="country-code" type="text" inputmode="numeric" maxlength="4" value="55" />
+            <small>Brasil: 55</small>
+          </label>
+
+          <label>
+            <span>Nome do dispositivo <em>opcional</em></span>
+            <input id="device-name" type="text" maxlength="80" placeholder="Notebook do Hugo" />
+            <small>Apenas para sua organização.</small>
+          </label>
+        </div>
+
+        <div id="status" class="status" role="status" aria-live="polite" hidden></div>
+
+        <footer>
+          <button id="test-connection" class="secondary-button" type="button">
+            Testar conexão
+          </button>
+          <button class="primary-button" type="submit">Salvar configurações</button>
+        </footer>
+      </form>
+
+      <section class="help-card">
+        <h2>Atalho</h2>
+        <p>
+          O atalho inicial é <strong>Alt + S</strong>. Para alterar, abra
+          <code>chrome://extensions/shortcuts</code>.
+        </p>
+      </section>
+    </main>
+
+    <script type="module" src="./options.js"></script>
+  </body>
+</html>

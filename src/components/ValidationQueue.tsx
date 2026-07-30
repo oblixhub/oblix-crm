@@ -16,7 +16,8 @@ import {
   UserRoundCheck,
   UsersRound,
 } from "lucide-react";
-import { useDeferredValue, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { ownerLabels } from "../types";
 import type {
   Lead,
   Owner,
@@ -39,6 +40,7 @@ export interface BatchValidationSettings {
 
 interface ValidationQueueProps {
   leads: Lead[];
+  ownerOptions: Owner[];
   onValidate: (leadId: number, settings: ValidationSettings) => void;
   onValidateBatch: (
     batchName: string,
@@ -55,37 +57,136 @@ const statusLabels: Record<ValidationStatus, string> = {
   discarded: "Descartados",
 };
 
+const VALIDATION_WORKSPACE_STORAGE_KEY = "oblix-crm-validation-workspace-v2";
+
+type ValidationWorkspace = {
+  activeBatch?: string;
+  status?: ValidationStatus;
+  selectedHandle?: string | null;
+  validationMode?: "individual" | "batch";
+  query?: string;
+};
+
+const loadValidationWorkspace = (): ValidationWorkspace => {
+  try {
+    const saved = window.sessionStorage.getItem(VALIDATION_WORKSPACE_STORAGE_KEY);
+    if (!saved) return {};
+    const parsed = JSON.parse(saved) as Record<string, unknown>;
+    return {
+      activeBatch:
+        typeof parsed.activeBatch === "string" ? parsed.activeBatch : undefined,
+      status:
+        parsed.status === "pending" ||
+        parsed.status === "valid" ||
+        parsed.status === "discarded"
+          ? parsed.status
+          : undefined,
+      selectedHandle:
+        typeof parsed.selectedHandle === "string" ? parsed.selectedHandle : null,
+      validationMode:
+        parsed.validationMode === "batch" || parsed.validationMode === "individual"
+          ? parsed.validationMode
+          : undefined,
+      query: typeof parsed.query === "string" ? parsed.query : "",
+    };
+  } catch {
+    return {};
+  }
+};
+
 export function ValidationQueue({
   leads,
+  ownerOptions,
   onValidate,
   onValidateBatch,
   onDiscard,
   onNewLead,
   onImport,
 }: ValidationQueueProps) {
-  const batches = useMemo(
-    () =>
-      [...new Set(leads.map((lead) => lead.batchName))].sort((a, b) =>
-        b.localeCompare(a, "pt-BR", { numeric: true }),
-      ),
-    [leads],
+  const batches = useMemo(() => {
+    const pendingByBatch = new Map<string, number>();
+    leads.forEach((lead) => {
+      const pending = pendingByBatch.get(lead.batchName) ?? 0;
+      pendingByBatch.set(
+        lead.batchName,
+        pending + Number(lead.validationStatus === "pending"),
+      );
+    });
+
+    return [...pendingByBatch.keys()].sort((a, b) => {
+      const aHasPending = Number((pendingByBatch.get(a) ?? 0) > 0);
+      const bHasPending = Number((pendingByBatch.get(b) ?? 0) > 0);
+      return (
+        bHasPending - aHasPending ||
+        a.localeCompare(b, "pt-BR", { numeric: true })
+      );
+    });
+  }, [leads]);
+  const [restoredWorkspace] = useState(loadValidationWorkspace);
+  const [activeBatch, setActiveBatch] = useState(
+    () => restoredWorkspace.activeBatch ?? "",
   );
-  const [activeBatch, setActiveBatch] = useState(() => batches[0] ?? "Lote 1");
-  const [status, setStatus] = useState<ValidationStatus>("pending");
-  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState<ValidationStatus>(
+    () => restoredWorkspace.status ?? "pending",
+  );
+  const [query, setQuery] = useState(() => restoredWorkspace.query ?? "");
   const deferredQuery = useDeferredValue(query);
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedHandle, setSelectedHandle] = useState<string | null>(
+    () => restoredWorkspace.selectedHandle ?? null,
+  );
   const [priority, setPriority] = useState<Priority>("Normal");
-  const [owner, setOwner] = useState<Owner>("Você");
+  const [owner, setOwner] = useState<Owner>(
+    () => ownerOptions[0] ?? "Equipe",
+  );
   const [nextAction, setNextAction] = useState("Enviar mensagem inicial");
   const [day, setDay] = useState<WeekDay>("Hoje");
   const [time, setTime] = useState("10:00");
   const [discardReason, setDiscardReason] = useState("");
   const [validationMode, setValidationMode] = useState<
     "individual" | "batch"
-  >("individual");
-  const [batchOwner, setBatchOwner] = useState<Owner>("Você");
+  >(() => restoredWorkspace.validationMode ?? "individual");
+  const [batchOwner, setBatchOwner] = useState<Owner>(
+    () => ownerOptions[0] ?? "Equipe",
+  );
   const [confirmBatch, setConfirmBatch] = useState(false);
+
+  const persistWorkspace = (patch: Partial<ValidationWorkspace> = {}) => {
+    try {
+      window.sessionStorage.setItem(
+        VALIDATION_WORKSPACE_STORAGE_KEY,
+        JSON.stringify({
+          activeBatch,
+          status,
+          selectedHandle,
+          validationMode,
+          query,
+          ...patch,
+        }),
+      );
+    } catch {
+      // The queue remains usable if browser storage is unavailable.
+    }
+  };
+
+  useEffect(() => {
+    if (!batches.length) return;
+    setActiveBatch((current) =>
+      current && batches.includes(current) ? current : batches[0],
+    );
+  }, [batches]);
+
+  useEffect(() => {
+    if (!ownerOptions.includes(owner)) {
+      setOwner(ownerOptions[0] ?? "Equipe");
+    }
+    if (!ownerOptions.includes(batchOwner)) {
+      setBatchOwner(ownerOptions[0] ?? "Equipe");
+    }
+  }, [batchOwner, owner, ownerOptions]);
+
+  useEffect(() => {
+    persistWorkspace();
+  }, [activeBatch, query, selectedHandle, status, validationMode]);
 
   const batchLeads = leads.filter((lead) => lead.batchName === activeBatch);
   const counts = {
@@ -113,7 +214,13 @@ export function ValidationQueue({
   }, [activeBatch, deferredQuery, leads, status]);
 
   const selectedLead =
-    queue.find((lead) => lead.id === selectedId) ?? queue[0] ?? null;
+    queue.find((lead) => lead.handle === selectedHandle) ?? queue[0] ?? null;
+
+  useEffect(() => {
+    if (selectedLead && selectedLead.handle !== selectedHandle) {
+      setSelectedHandle(selectedLead.handle);
+    }
+  }, [selectedHandle, selectedLead?.handle]);
   const completed = counts.valid + counts.discarded;
   const progress = batchLeads.length
     ? Math.round((completed / batchLeads.length) * 100)
@@ -121,6 +228,11 @@ export function ValidationQueue({
 
   const approve = () => {
     if (!selectedLead) return;
+    const selectedIndex = queue.findIndex(
+      (lead) => lead.handle === selectedLead.handle,
+    );
+    const nextLead = queue[selectedIndex + 1] ?? queue[selectedIndex - 1] ?? null;
+    setSelectedHandle(nextLead?.handle ?? null);
     onValidate(selectedLead.id, {
       priority,
       owner,
@@ -133,6 +245,11 @@ export function ValidationQueue({
 
   const discard = () => {
     if (!selectedLead) return;
+    const selectedIndex = queue.findIndex(
+      (lead) => lead.handle === selectedLead.handle,
+    );
+    const nextLead = queue[selectedIndex + 1] ?? queue[selectedIndex - 1] ?? null;
+    setSelectedHandle(nextLead?.handle ?? null);
     onDiscard(
       selectedLead.id,
       discardReason.trim() || "Perfil fora do critério de prospecção.",
@@ -196,7 +313,7 @@ export function ValidationQueue({
             value={activeBatch}
             onChange={(event) => {
               setActiveBatch(event.target.value);
-              setSelectedId(null);
+              setSelectedHandle(null);
               setValidationMode("individual");
               setConfirmBatch(false);
             }}
@@ -279,7 +396,7 @@ export function ValidationQueue({
               disabled={counts.pending === 0}
               onClick={() => {
                 setValidationMode("batch");
-                setSelectedId(null);
+                setSelectedHandle(null);
               }}
             >
               <span>
@@ -307,7 +424,7 @@ export function ValidationQueue({
             className={status === item ? "active" : ""}
             onClick={() => {
               setStatus(item);
-              setSelectedId(null);
+              setSelectedHandle(null);
               setConfirmBatch(false);
             }}
           >
@@ -365,8 +482,11 @@ export function ValidationQueue({
                     setBatchOwner(event.target.value as Owner)
                   }
                 >
-                  <option>Você</option>
-                  <option>Sócia</option>
+                  {ownerOptions.map((teamOwner) => (
+                    <option key={teamOwner} value={teamOwner}>
+                      {ownerLabels[teamOwner] ?? teamOwner}
+                    </option>
+                  ))}
                 </select>
                 <small>
                   Prazos e prioridades individuais podem ser ajustados depois
@@ -441,7 +561,10 @@ export function ValidationQueue({
               <button
                 key={lead.id}
                 className={selectedLead?.id === lead.id ? "active" : ""}
-                onClick={() => setSelectedId(lead.id)}
+                onClick={() => {
+                  setSelectedHandle(lead.handle);
+                  persistWorkspace({ selectedHandle: lead.handle });
+                }}
               >
                 <span>{lead.handle.replace("@", "").slice(0, 2).toUpperCase()}</span>
                 <i>
@@ -476,7 +599,10 @@ export function ValidationQueue({
                 className="button button--secondary"
                 href={selectedLead.instagramUrl}
                 target="_blank"
-                rel="noreferrer"
+                rel="noopener noreferrer"
+                onClick={() =>
+                  persistWorkspace({ selectedHandle: selectedLead.handle })
+                }
               >
                 Abrir Instagram
                 <ExternalLink size={16} />
@@ -536,8 +662,11 @@ export function ValidationQueue({
                         setOwner(event.target.value as Owner)
                       }
                     >
-                      <option>Você</option>
-                      <option>Sócia</option>
+                      {ownerOptions.map((teamOwner) => (
+                        <option key={teamOwner} value={teamOwner}>
+                          {ownerLabels[teamOwner] ?? teamOwner}
+                        </option>
+                      ))}
                     </select>
                   </label>
                   <label className="validation-next-action">

@@ -1,4 +1,5 @@
 import {
+  Trash2,
   BadgeCheck,
   CalendarClock,
   Check,
@@ -10,14 +11,34 @@ import {
   ExternalLink,
   FileArchive,
   Heart,
+  Layers3,
+  Link2,
+  LockKeyhole,
   MessageCircle,
   Pencil,
   Send,
+  ShieldCheck,
+  UnlockKeyhole,
   UserRoundCheck,
 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { stages, type Activity, type Lead, type Stage } from "../types";
+import {
+  ownerLabels,
+  leadSourceLabels,
+  stages,
+  type Activity,
+  type CommercialRecord,
+  type Lead,
+  type LeadProject,
+  type LeadTag,
+  type Owner,
+  type PaymentInstallment,
+  type Stage,
+} from "../types";
+import { CommercialPanel } from "./CommercialPanel";
 import { ContactActions } from "./ContactActions";
+import { TagEditor } from "./TagEditor";
+import { WhatsAppEditor } from "./WhatsAppEditor";
 
 const activityIcons = {
   validation: UserRoundCheck,
@@ -32,23 +53,64 @@ const activityIcons = {
 interface LeadDetailProps {
   lead: Lead;
   onBack: () => void;
+  onDeleteLead: (leadId: number) => Promise<void> | void;
+  deletingLead: boolean;
   onStageChange: (stage: Stage) => void;
+  onOwnerChange: (owner: Owner) => void;
   onAddNote: (note: string) => void;
-  onUpload: (file: File) => void;
+  onUpload: (file: File) => Promise<void>;
+  previewPublishing: boolean;
   onOpenClientPreview: () => void;
-  onMarkPaid: () => void;
+  onOpenTeamPreview: () => void;
+  onTogglePreviewMode: (requiresLogin: boolean) => void;
+  onCopyPreviewLink: () => void;
   onOpenMessages: () => void;
+  onWhatsAppChange: (number: string | null) => void;
+  isOwner: boolean;
+  ownerOptions: Owner[];
+  availableTags: LeadTag[];
+  onToggleTag: (tag: LeadTag) => void;
+  onCreateTag: (name: string, category: string) => Promise<LeadTag | null>;
+  onContactControlChange: (
+    permission: Lead["contactPermission"],
+    doNotContact: boolean,
+  ) => void;
+  commercial?: CommercialRecord;
+  project?: LeadProject;
+  installments: PaymentInstallment[];
+  onSaveCommercial: (
+    commercial: CommercialRecord,
+    project: LeadProject,
+    installments: PaymentInstallment[],
+  ) => Promise<void>;
 }
 
 export function LeadDetail({
   lead,
   onBack,
+  onDeleteLead,
+  deletingLead,
   onStageChange,
+  onOwnerChange,
   onAddNote,
   onUpload,
+  previewPublishing,
   onOpenClientPreview,
-  onMarkPaid,
+  onOpenTeamPreview,
+  onTogglePreviewMode,
+  onCopyPreviewLink,
   onOpenMessages,
+  onWhatsAppChange,
+  isOwner,
+  ownerOptions,
+  availableTags,
+  onToggleTag,
+  onCreateTag,
+  onContactControlChange,
+  commercial,
+  project,
+  installments,
+  onSaveCommercial,
 }: LeadDetailProps) {
   const [note, setNote] = useState("");
   const visibleStages: readonly Stage[] =
@@ -80,10 +142,40 @@ export function LeadDetail({
         <div className="lead-title">
           <span className="breadcrumb">Leads / {lead.handle}</span>
           <h1>{lead.handle}</h1>
-          <p>{lead.category} · Instagram</p>
+          <p className="lead-title-meta">
+            <span>{lead.category} · Instagram</span>
+            <span className="batch-chip">
+              <Layers3 size={13} />
+              {lead.batchName}
+            </span>
+            <span className="source-chip">
+              {leadSourceLabels[lead.sourceType]}
+            </span>
+            {lead.capturedAt && (
+              <span>
+                Capturado em {new Date(lead.capturedAt).toLocaleString("pt-BR")}
+                {lead.capturedBy ? ` por ${lead.capturedBy}` : ""}
+              </span>
+            )}
+          </p>
         </div>
         <div className="lead-header-actions">
           <ContactActions lead={lead} onOpenMessages={onOpenMessages} />
+          <WhatsAppEditor
+            compact
+            lead={lead}
+            onSave={onWhatsAppChange}
+          />
+          {isOwner && (
+            <button
+              className="button validation-discard"
+              onClick={() => void onDeleteLead(lead.id)}
+              disabled={deletingLead}
+            >
+              <Trash2 size={17} />
+              {deletingLead ? "Excluindo..." : "Excluir lead"}
+            </button>
+          )}
         </div>
         <label className="field compact-field">
           <span>Etapa atual</span>
@@ -93,6 +185,20 @@ export function LeadDetail({
           >
             {visibleStages.map((stage) => (
               <option key={stage}>{stage}</option>
+            ))}
+          </select>
+        </label>
+        <label className="field compact-field">
+          <span>Responsável</span>
+          <select
+            value={lead.owner}
+            onChange={(event) => onOwnerChange(event.target.value as Owner)}
+            disabled={!isOwner}
+          >
+            {ownerOptions.map((owner) => (
+              <option key={owner} value={owner}>
+                {ownerLabels[owner] ?? owner}
+              </option>
             ))}
           </select>
         </label>
@@ -174,35 +280,118 @@ export function LeadDetail({
               </button>
             </div>
           </div>
+          <TagEditor
+            selected={lead.tags}
+            available={availableTags}
+            onToggle={onToggleTag}
+            onCreate={onCreateTag}
+            canCreate={isOwner}
+          />
+          <section className="contact-permission-panel">
+            <header>
+              <strong>Permissão e segurança de contato</strong>
+              <small>
+                Registre quando a pessoa autorizar continuar pelo WhatsApp.
+              </small>
+            </header>
+            <div>
+              <label>
+                <span>Origem/permissão</span>
+                <select
+                  value={lead.contactPermission}
+                  onChange={(event) => {
+                    const permission = event.target
+                      .value as Lead["contactPermission"];
+                    onContactControlChange(
+                      permission,
+                      permission === "opted_out"
+                        ? true
+                        : lead.doNotContact,
+                    );
+                  }}
+                >
+                  <option value="public_contact">
+                    Contato público no Instagram
+                  </option>
+                  <option value="opted_in">
+                    Autorizou contato no WhatsApp
+                  </option>
+                  <option value="opted_out">
+                    Pediu para não receber mensagens
+                  </option>
+                </select>
+              </label>
+              <label className="do-not-contact-toggle">
+                <input
+                  type="checkbox"
+                  checked={lead.doNotContact}
+                  onChange={(event) =>
+                    onContactControlChange(
+                      event.target.checked
+                        ? "opted_out"
+                        : lead.contactPermission === "opted_out"
+                          ? "public_contact"
+                          : lead.contactPermission,
+                      event.target.checked,
+                    )
+                  }
+                />
+                Não contatar novamente
+              </label>
+            </div>
+          </section>
         </section>
 
         <aside className="lead-side-panels">
-          <section className="panel preview-panel">
-            <header className="panel-header">
-              <h2>Preview do cliente</h2>
+          {isOwner && (
+          <section className="panel preview-panel preview-workspace">
+            <header className="panel-header preview-workspace-header">
+              <div>
+                <h2>Publicação do site</h2>
+                <p>Envie, proteja e compartilhe o preview com o cliente.</p>
+              </div>
+              {lead.preview.status !== "none" && (
+                <span className="preview-live-badge">
+                  <span />
+                  Online
+                </span>
+              )}
             </header>
-            <label className="upload-zone">
+            <label className="upload-zone preview-dropzone">
               <input
                 type="file"
                 accept=".zip,application/zip"
+                disabled={previewPublishing}
                 onChange={(event) => {
                   const file = event.target.files?.[0];
-                  if (file) onUpload(file);
+                  if (file) {
+                    void onUpload(file);
+                    event.target.value = "";
+                  }
                 }}
               />
               <CloudUpload size={31} strokeWidth={1.6} />
-              <strong>Enviar ZIP do site</strong>
-              <span>Arraste e solte o arquivo aqui</span>
-              <small>ou clique para selecionar</small>
+              <strong>
+                {previewPublishing ? "Publicando preview..." : "Selecionar arquivo ZIP"}
+              </strong>
+              <span>O CRM valida os arquivos e publica uma nova versão.</span>
+              <small>Arquivo .zip · máximo de 20 MB</small>
             </label>
 
-            <div className="version-block">
-              <strong>Versão atual</strong>
+            <div className="version-block preview-version-card">
+              <div className="preview-section-heading">
+                <span className="preview-section-icon">
+                  <FileArchive size={18} />
+                </span>
+                <div>
+                  <strong>Versão publicada</strong>
+                  <small>O ZIP mais recente disponível para o cliente</small>
+                </div>
+              </div>
               {lead.preview.status === "none" ? (
                 <p>Nenhuma versão publicada</p>
               ) : (
                 <div className="version-file">
-                  <FileArchive size={19} />
                   <div>
                     <strong>Versão {lead.preview.version}</strong>
                     <small>{lead.preview.fileName}</small>
@@ -210,79 +399,107 @@ export function LeadDetail({
                   <span className="status-success">Pronto</span>
                 </div>
               )}
+
+              <ul className="validation-list preview-validation-list">
+                <li className={lead.preview.checklist.index ? "complete" : ""}>
+                  {lead.preview.checklist.index ? <Check size={15} /> : <Circle size={15} />}
+                  HTML encontrado
+                </li>
+                <li className={lead.preview.checklist.relativePaths ? "complete" : ""}>
+                  {lead.preview.checklist.relativePaths ? <Check size={15} /> : <Circle size={15} />}
+                  Caminhos válidos
+                </li>
+                <li className={lead.preview.checklist.protectedAccess ? "complete" : ""}>
+                  {lead.preview.checklist.protectedAccess ? <Check size={15} /> : <Circle size={15} />}
+                  Conteúdo isolado
+                </li>
+              </ul>
             </div>
 
-            <ul className="validation-list">
-              <li className={lead.preview.checklist.index ? "complete" : ""}>
-                {lead.preview.checklist.index ? <Check size={15} /> : <Circle size={15} />}
-                index.html
-              </li>
-              <li
-                className={
-                  lead.preview.checklist.relativePaths ? "complete" : ""
-                }
-              >
-                {lead.preview.checklist.relativePaths ? (
-                  <Check size={15} />
-                ) : (
-                  <Circle size={15} />
-                )}
-                Caminhos relativos
-              </li>
-              <li
-                className={
-                  lead.preview.checklist.protectedAccess ? "complete" : ""
-                }
-              >
-                {lead.preview.checklist.protectedAccess ? (
-                  <Check size={15} />
-                ) : (
-                  <Circle size={15} />
-                )}
-                Acesso protegido
-              </li>
-            </ul>
+            <div
+              className={`preview-access-card ${
+                lead.preview.requiresLogin ? "is-protected" : "is-direct"
+              }`}
+            >
+              <div className="preview-access-heading">
+                <span className="preview-section-icon">
+                  {lead.preview.requiresLogin ? (
+                    <LockKeyhole size={18} />
+                  ) : (
+                    <UnlockKeyhole size={18} />
+                  )}
+                </span>
+                <div>
+                  <strong>Exigir senha para abrir</strong>
+                  <small>
+                    {lead.preview.requiresLogin
+                      ? "Proteção ativada para este preview"
+                      : "O cliente acessa diretamente pelo link"}
+                  </small>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={lead.preview.requiresLogin}
+                  aria-label="Exigir senha para abrir o preview"
+                  className="preview-access-switch"
+                  disabled={previewPublishing}
+                  onClick={() =>
+                    onTogglePreviewMode(!lead.preview.requiresLogin)
+                  }
+                >
+                  <span />
+                </button>
+              </div>
+              <div className="preview-access-explanation">
+                <ShieldCheck size={16} />
+                <span>
+                  {lead.preview.requiresLogin
+                    ? `Usuário e senha: ${lead.handle}`
+                    : "O endereço curto continua exclusivo e pode receber senha depois."}
+                </span>
+              </div>
+              {lead.preview.status !== "none" && lead.preview.publicSlug && (
+                <div className="preview-short-link">
+                  <Link2 size={15} />
+                  <span>sites.oblixhub.com/preview/{lead.preview.publicSlug}</span>
+                </div>
+              )}
+            </div>
 
             {lead.preview.status !== "none" && (
-              <button
-                className="button button--secondary button--full"
-                onClick={onOpenClientPreview}
-              >
-                <ExternalLink size={17} />
-                Simular acesso do cliente
-              </button>
+              <div className="preview-link-actions">
+                <button className="button button--secondary" onClick={onOpenClientPreview}>
+                  <ExternalLink size={17} />
+                  Abrir link do cliente
+                </button>
+                <button className="button button--quiet" onClick={onCopyPreviewLink}>
+                  <Link2 size={16} />
+                  Copiar link
+                </button>
+                <button
+                  className="button button--quiet"
+                  onClick={onOpenTeamPreview}
+                  disabled={previewPublishing}
+                >
+                  Abrir preview interno
+                </button>
+              </div>
             )}
           </section>
 
-          <section className="panel payment-panel">
-            <header className="panel-header">
-              <h2>Pagamento</h2>
-            </header>
-            <div className="offer-row">
-              <div>
-                <span>Oferta {lead.offer.toLowerCase()}</span>
-                <small>Aprovação e pagamento são etapas separadas.</small>
-              </div>
-              <strong>R$ {lead.amount}</strong>
-            </div>
-            <span
-              className={`payment-status payment-${lead.paymentStatus
-                .toLowerCase()
-                .replace(" ", "-")}`}
-            >
-              {lead.paymentStatus}
-            </span>
-            {lead.paymentStatus === "Aguardando PIX" && (
-              <button
-                className="button button--primary button--full"
-                onClick={onMarkPaid}
-              >
-                Confirmar pagamento
-              </button>
-            )}
-          </section>
+          )}
         </aside>
       </div>
+      {isOwner && (
+        <CommercialPanel
+          lead={lead}
+          commercial={commercial}
+          project={project}
+          installments={installments}
+          onSave={onSaveCommercial}
+        />
+      )}
     </div>
   );
 }

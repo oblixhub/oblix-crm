@@ -1,4 +1,6 @@
-import { Check, Eye, FileArchive, UploadCloud } from "lucide-react";
+import { Check, Eye, FileArchive, Layers3, UploadCloud } from "lucide-react";
+import { useMemo, useState } from "react";
+import { ALL_BATCHES, getBatchNames, matchesBatch } from "../lib/leads";
 import type { Lead } from "../types";
 
 interface PreviewHubProps {
@@ -12,13 +14,33 @@ export function PreviewHub({
   onSelectLead,
   onOpenClientPreview,
 }: PreviewHubProps) {
-  const previewLeads = leads.filter((lead) => lead.preview.status !== "none");
+  const [batch, setBatch] = useState<string>(ALL_BATCHES);
+  const batches = useMemo(() => getBatchNames(leads), [leads]);
+  const previewLeads = useMemo(
+    () =>
+      leads.filter(
+        (lead) => lead.preview.status !== "none" && matchesBatch(lead, batch),
+      ),
+    [batch, leads],
+  );
+  const previewSummary = useMemo(
+    () =>
+      previewLeads.reduce(
+        (summary, lead) => {
+          if (lead.preview.status === "viewed") summary.viewed += 1;
+          if (lead.preview.status === "approved") summary.approved += 1;
+          return summary;
+        },
+        { viewed: 0, approved: 0 },
+      ),
+    [previewLeads],
+  );
 
   return (
     <div className="standard-page">
       <div className="page-heading">
-        <h1>Previews</h1>
-        <p>Versões publicadas, acessos e aprovações dos clientes.</p>
+        <h1>Sites</h1>
+        <p>ZIPs publicados, acessos e aprovações dos clientes.</p>
       </div>
       <div className="preview-summary">
         <div>
@@ -26,17 +48,25 @@ export function PreviewHub({
           <span>Com preview</span>
         </div>
         <div>
-          <strong>
-            {previewLeads.filter((lead) => lead.preview.status === "viewed").length}
-          </strong>
+          <strong>{previewSummary.viewed}</strong>
           <span>Visualizados</span>
         </div>
         <div>
-          <strong>
-            {previewLeads.filter((lead) => lead.preview.status === "approved").length}
-          </strong>
+          <strong>{previewSummary.approved}</strong>
           <span>Aprovados</span>
         </div>
+      </div>
+      <div className="list-filterbar">
+        <Layers3 size={18} />
+        <label>
+          <span>Filtrar por lote</span>
+          <select value={batch} onChange={(event) => setBatch(event.target.value)}>
+            <option>{ALL_BATCHES}</option>
+            {batches.map((batchName) => (
+              <option key={batchName}>{batchName}</option>
+            ))}
+          </select>
+        </label>
       </div>
       <section className="panel preview-list">
         {previewLeads.map((lead) => (
@@ -46,8 +76,14 @@ export function PreviewHub({
             </span>
             <div className="preview-list-copy">
               <strong>{lead.handle}</strong>
+              <small className="batch-chip">
+                <Layers3 size={12} />
+                {lead.batchName}
+              </small>
               <span>
-                sites.oblixhub.com/{lead.preview.publicSlug}
+                {lead.preview.publicSlug
+                  ? `sites.oblixhub.com/preview/${lead.preview.publicSlug}`
+                  : "Republique o ZIP para gerar o link curto"}
               </span>
             </div>
             <div className="preview-list-status">
@@ -56,33 +92,44 @@ export function PreviewHub({
                   <Check size={16} />
                   Aprovado
                 </>
-              ) : (
+              ) : lead.preview.status === "viewed" ? (
                 <>
                   <Eye size={16} />
                   Visualizado
                 </>
+              ) : (
+                <>
+                  <UploadCloud size={16} />
+                  Publicado
+                </>
               )}
             </div>
-            <button
-              className="button button--quiet"
-              onClick={() => onOpenClientPreview(lead.id)}
-            >
-              <Eye size={17} />
-              Ver acesso
-            </button>
-            <button
-              className="button button--secondary"
-              onClick={() => onSelectLead(lead.id)}
-            >
-              Gerenciar
-            </button>
+            <div className="preview-list-actions">
+              <button
+                className="button button--quiet"
+                onClick={() => onOpenClientPreview(lead.id)}
+              >
+                <Eye size={17} />
+                Ver acesso
+              </button>
+              <button
+                className="button button--secondary"
+                onClick={() => onSelectLead(lead.id)}
+              >
+                Gerenciar
+              </button>
+            </div>
           </article>
         ))}
         {previewLeads.length === 0 && (
           <div className="large-empty-state">
             <UploadCloud size={31} />
-            <h2>Nenhum preview publicado</h2>
-            <p>Abra um lead para enviar o primeiro ZIP.</p>
+            <h2>Nenhum site publicado</h2>
+            <p>
+              {batch === ALL_BATCHES
+                ? "Abra um lead na etapa Materiais para enviar um novo ZIP."
+                : "Nenhum site publicado neste lote."}
+            </p>
           </div>
         )}
       </section>
