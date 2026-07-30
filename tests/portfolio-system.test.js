@@ -78,3 +78,32 @@ test("endpoint público projeta apenas metadados seguros", async () => {
   assert.doesNotMatch(projection, /created_by/);
   assert.match(source, /project\.show_live_link \? project\.live_url : null/);
 });
+
+test("gestor mantém a falha visível e permite retomar uma publicação", async () => {
+  const source = await readFile(
+    repoFile("src/components/PortfolioManager.tsx"),
+    "utf8",
+  );
+  assert.match(source, /className="portfolio-editor-message"/);
+  assert.match(source, /role=\{message\.tone === "error" \? "alert" : "status"\}/);
+  assert.match(source, /const suggestedTitle = titleFromZipName\(file\.name\)/);
+  assert.match(source, /id: data\.id,\s*status: "draft"/s);
+  assert.match(source, /await loadProjects\(\);\s*\}\s*finally/s);
+  assert.match(source, /tone === "error" \? 0/);
+});
+
+test("lista pública ignora cache após uma nova publicação", async () => {
+  const [clientSource, functionSource] = await Promise.all([
+    readFile(repoFile("src/lib/portfolio.ts"), "utf8"),
+    readFile(
+      repoFile("supabase/functions/portfolio-public/index.ts"),
+      "utf8",
+    ),
+  ]);
+  assert.match(clientSource, /cache: "no-store"/);
+  assert.match(
+    clientSource,
+    /searchParams\.set\("_refresh", String\(Date\.now\(\)\)\)/,
+  );
+  assert.match(functionSource, /"Cache-Control": "no-store"/);
+});

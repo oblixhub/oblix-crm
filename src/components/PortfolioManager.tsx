@@ -1,4 +1,5 @@
 import {
+  AlertTriangle,
   Archive,
   ArrowDown,
   ArrowUp,
@@ -6,6 +7,7 @@ import {
   ExternalLink,
   FileArchive,
   ImagePlus,
+  Info,
   LoaderCircle,
   Pencil,
   Plus,
@@ -17,6 +19,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type FormEvent,
 } from "react";
@@ -56,6 +59,33 @@ type PortfolioFormState = {
   status: PortfolioStatus;
 };
 
+type PortfolioMessage = {
+  text: string;
+  tone: "info" | "success" | "error";
+};
+
+function PortfolioMessageNotice({
+  message,
+  className = "",
+}: {
+  message: PortfolioMessage;
+  className?: string;
+}) {
+  const Icon = message.tone === "error" ? AlertTriangle : message.tone === "info" ? Info : Check;
+  return (
+    <div
+      className={`portfolio-manager-message is-${message.tone} ${className}`.trim()}
+      role={message.tone === "error" ? "alert" : "status"}
+      aria-live={message.tone === "error" ? "assertive" : "polite"}
+    >
+      <Icon size={18} />
+      <span>{message.text}</span>
+    </div>
+  );
+}
+
+const MAX_ZIP_BYTES = 20 * 1024 * 1024;
+
 const emptyForm = (): PortfolioFormState => ({
   sourceType: "lead_preview",
   leadId: "",
@@ -90,6 +120,22 @@ const safeFileName = (value: string) =>
     .replace(/[^a-zA-Z0-9._-]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .toLowerCase();
+
+const titleFromZipName = (value: string) => {
+  const cleaned = value
+    .replace(/\.zip$/i, "")
+    .replace(/\s*\(\d+\)\s*$/i, "")
+    .replace(/^(?:landing\s*page|website|site)\s+/i, "")
+    .replace(/[-_]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return cleaned.replace(
+    /(^|\s)(\p{L})/gu,
+    (_, separator: string, letter: string) =>
+      `${separator}${letter.toLocaleUpperCase("pt-BR")}`,
+  );
+};
 
 const publicCoverUrl = (path?: string) =>
   path && supabaseUrl
@@ -177,7 +223,12 @@ export function PortfolioManager({
   const [desktopCover, setDesktopCover] = useState<File | null>(null);
   const [mobileCover, setMobileCover] = useState<File | null>(null);
   const [saving, setSaving] = useState<"draft" | "publish" | null>(null);
-  const [localMessage, setLocalMessage] = useState("");
+  const [savingStep, setSavingStep] = useState("");
+  const [localMessage, setLocalMessage] = useState<PortfolioMessage | null>(
+    null,
+  );
+  const onToastRef = useRef(onToast);
+  const messageTimeoutRef = useRef<number | null>(null);
 
   const eligibleLeads = useMemo(
     () =>
@@ -189,13 +240,30 @@ export function PortfolioManager({
     [leads],
   );
 
+  useEffect(() => {
+    onToastRef.current = onToast;
+  }, [onToast]);
+
   const notify = useCallback(
-    (message: string) => {
-      setLocalMessage(message);
-      onToast?.(message);
-      window.setTimeout(() => setLocalMessage(""), 4500);
+    (
+      text: string,
+      tone: PortfolioMessage["tone"] = "success",
+      duration = tone === "error" ? 0 : tone === "info" ? 12000 : 6500,
+    ) => {
+      if (messageTimeoutRef.current !== null) {
+        window.clearTimeout(messageTimeoutRef.current);
+      }
+      setLocalMessage({ text, tone });
+      onToastRef.current?.(text);
+      messageTimeoutRef.current =
+        duration > 0
+          ? window.setTimeout(() => {
+              setLocalMessage(null);
+              messageTimeoutRef.current = null;
+            }, duration)
+          : null;
     },
-    [onToast],
+    [],
   );
 
   const loadProjects = useCallback(async () => {
@@ -210,7 +278,10 @@ export function PortfolioManager({
       .order("sort_order", { ascending: true })
       .order("created_at", { ascending: false });
     if (error) {
-      notify(`Não foi possível carregar o portfólio: ${error.message}`);
+      notify(
+        `Não foi possível carregar o portfólio: ${error.message}`,
+        "error",
+      );
     } else {
       setProjects(
         ((data ?? []) as Record<string, unknown>[]).map(mapPortfolioProject),
@@ -222,6 +293,15 @@ export function PortfolioManager({
   useEffect(() => {
     void loadProjects();
   }, [loadProjects]);
+
+  useEffect(
+    () => () => {
+      if (messageTimeoutRef.current !== null) {
+        window.clearTimeout(messageTimeoutRef.current);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!drawerOpen) return;
@@ -273,6 +353,36 @@ export function PortfolioManager({
     }));
   };
 
+  const chooseStandaloneZip = (file: File | null) => {
+    if (!file) {
+      setZipFile(null);
+      return;
+    }
+    if (!/\.zip$/i.test(file.name) || file.size === 0) {
+      setZipFile(null);
+      notify("Selecione um arquivo ZIP válido.", "error");
+      return;
+    }
+    if (file.size > MAX_ZIP_BYTES) {
+      setZipFile(null);
+      notify("O ZIP pode ter no máximo 20 MB.", "error");
+      return;
+    }
+
+    const suggestedTitle = titleFromZipName(file.name);
+    setZipFile(file);
+    setForm((current) => ({
+      ...current,
+      title: current.title || suggestedTitle,
+      slug: current.slug || toSlug(suggestedTitle),
+    }));
+    notify(
+      `${file.name} selecionado. Confira os dados e clique em Publicar projeto.`,
+      "info",
+      9000,
+    );
+  };
+
   const uploadFile = async (
     projectId: string,
     file: File,
@@ -297,32 +407,39 @@ export function PortfolioManager({
 
   const persist = async (publish: boolean) => {
     if (!supabase || !currentUserId) {
-      notify("Sua sessão não está pronta. Entre novamente no CRM.");
+      notify(
+        "Sua sessão não está pronta. Entre novamente no CRM.",
+        "error",
+      );
       return;
     }
     const normalizedSlug = toSlug(form.slug || form.title);
     if (!form.title.trim() || !normalizedSlug) {
-      notify("Preencha o título e o endereço do projeto.");
+      notify("Preencha o título e o endereço do projeto.", "error");
       return;
     }
     if (form.sourceType === "lead_preview" && !form.leadId) {
-      notify("Selecione o lead que contém o site.");
+      notify("Selecione o lead que contém o site.", "error");
       return;
     }
     if (form.sourceType === "standalone_zip" && !zipFile && !form.sourcePath) {
-      notify("Selecione o ZIP do projeto avulso.");
+      notify("Selecione o ZIP do projeto avulso.", "error");
       return;
     }
     if (publish && !form.publicationAuthorized) {
-      notify("Confirme a autorização para publicar o trabalho.");
+      notify("Confirme a autorização para publicar o trabalho.", "error");
       return;
     }
     if (form.showLiveLink && !/^https:\/\//i.test(form.liveUrl.trim())) {
-      notify("O link do site no ar precisa começar com https://.");
+      notify(
+        "O link do site no ar precisa começar com https://.",
+        "error",
+      );
       return;
     }
 
     setSaving(publish ? "publish" : "draft");
+    setSavingStep("Salvando as informações do projeto…");
     try {
       const selectedLead = eligibleLeads.find(
         (lead) => lead.remoteId === form.leadId,
@@ -377,9 +494,19 @@ export function PortfolioManager({
           .single();
         if (error) throw error;
         projectId = data.id;
+        setForm((current) => ({
+          ...current,
+          id: data.id,
+          status: "draft",
+        }));
       }
       if (!projectId) throw new Error("Não foi possível identificar o projeto.");
 
+      setSavingStep(
+        zipFile || desktopCover || mobileCover
+          ? "Enviando os arquivos…"
+          : "Conferindo os arquivos salvos…",
+      );
       const [newSourcePath, newDesktopPath, newMobilePath] = await Promise.all([
         zipFile
           ? uploadFile(projectId, zipFile, "zip")
@@ -391,6 +518,17 @@ export function PortfolioManager({
           ? uploadFile(projectId, mobileCover, "mobile")
           : Promise.resolve(form.coverMobilePath),
       ]);
+
+      setForm((current) => ({
+        ...current,
+        id: projectId,
+        sourcePath: newSourcePath,
+        coverDesktopPath: newDesktopPath,
+        coverMobilePath: newMobilePath,
+      }));
+      setZipFile(null);
+      setDesktopCover(null);
+      setMobileCover(null);
 
       const { error: fileUpdateError } = await supabase
         .from("portfolio_projects")
@@ -407,6 +545,7 @@ export function PortfolioManager({
       if (fileUpdateError) throw fileUpdateError;
 
       if (publish) {
+        setSavingStep("Preparando o site para o portfólio…");
         const { data, error } = await supabase.functions.invoke(
           "publish-portfolio",
           { body: { projectId } },
@@ -425,21 +564,32 @@ export function PortfolioManager({
           throw new Error(message);
         }
         if (data?.error) throw new Error(String(data.error));
-        notify("Projeto publicado e pronto para aparecer no portfólio.");
+        notify(
+          "Projeto publicado. Ele já está disponível no portfólio público.",
+          "success",
+        );
       } else {
-        notify("Rascunho salvo.");
+        notify("Rascunho e arquivos salvos com segurança.", "success");
       }
 
       setDrawerOpen(false);
       await loadProjects();
     } catch (error) {
-      notify(
+      const message =
         error instanceof Error
           ? error.message
-          : "Não foi possível salvar o projeto.",
+          : "Não foi possível salvar o projeto.";
+      notify(
+        /duplicate key|portfolio_projects_slug_unique/i.test(message)
+          ? "Este endereço público já está em uso. Altere o endereço e tente novamente."
+          : message,
+        "error",
+        12000,
       );
+      await loadProjects();
     } finally {
       setSaving(null);
+      setSavingStep("");
     }
   };
 
@@ -459,7 +609,7 @@ export function PortfolioManager({
       .update({ ...patch, updated_at: new Date().toISOString() })
       .eq("id", project.id);
     if (error) {
-      notify(error.message);
+      notify(error.message, "error");
       return;
     }
     notify(successMessage);
@@ -484,7 +634,12 @@ export function PortfolioManager({
         .eq("id", swap.id),
     ]);
     if (projectUpdate.error || swapUpdate.error) {
-      notify(projectUpdate.error?.message || swapUpdate.error?.message || "Não foi possível alterar a ordem.");
+      notify(
+        projectUpdate.error?.message ||
+          swapUpdate.error?.message ||
+          "Não foi possível alterar a ordem.",
+        "error",
+      );
       return;
     }
     await loadProjects();
@@ -518,11 +673,8 @@ export function PortfolioManager({
         </button>
       </header>
 
-      {localMessage ? (
-        <div className="portfolio-manager-message" role="status">
-          <Check size={17} />
-          {localMessage}
-        </div>
+      {localMessage && !drawerOpen ? (
+        <PortfolioMessageNotice message={localMessage} />
       ) : null}
 
       <div className="portfolio-source-actions">
@@ -706,6 +858,13 @@ export function PortfolioManager({
               </button>
             </header>
             <form onSubmit={submit}>
+              {localMessage ? (
+                <PortfolioMessageNotice
+                  message={localMessage}
+                  className="portfolio-editor-message"
+                />
+              ) : null}
+
               <div className="portfolio-source-tabs" role="tablist">
                 <button
                   type="button"
@@ -767,7 +926,7 @@ export function PortfolioManager({
                     type="file"
                     accept=".zip,application/zip,application/x-zip-compressed"
                     onChange={(event) =>
-                      setZipFile(event.target.files?.[0] ?? null)
+                      chooseStandaloneZip(event.target.files?.[0] ?? null)
                     }
                   />
                   <Upload size={26} />
@@ -775,7 +934,11 @@ export function PortfolioManager({
                     {zipFile?.name ||
                       (form.sourcePath ? "ZIP já salvo" : "Enviar ZIP avulso")}
                   </strong>
-                  <span>Máximo de 20 MB · exportado pelo Claude Design</span>
+                  <span>
+                    {zipFile
+                      ? "Selecionado · será enviado ao salvar ou publicar"
+                      : "Máximo de 20 MB · exportado pelo Claude Design"}
+                  </span>
                 </label>
               )}
 
@@ -1003,7 +1166,7 @@ export function PortfolioManager({
                   {saving === "draft" ? (
                     <LoaderCircle className="spin" size={18} />
                   ) : null}
-                  Salvar rascunho
+                  {saving === "draft" ? savingStep : "Salvar rascunho"}
                 </button>
                 <button
                   type="button"
@@ -1016,7 +1179,7 @@ export function PortfolioManager({
                   ) : (
                     <Upload size={18} />
                   )}
-                  Publicar projeto
+                  {saving === "publish" ? savingStep : "Publicar projeto"}
                 </button>
               </footer>
             </form>

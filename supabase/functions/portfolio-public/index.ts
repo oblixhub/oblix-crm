@@ -6,7 +6,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, content-type, apikey",
   "Access-Control-Allow-Methods": "GET, OPTIONS",
   "Content-Type": "application/json; charset=utf-8",
-  "Cache-Control": "public, max-age=60, s-maxage=300",
+  "Cache-Control": "no-store",
 };
 
 const response = (body: Record<string, unknown>, status = 200) =>

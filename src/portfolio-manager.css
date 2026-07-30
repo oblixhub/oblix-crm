@@ -58,6 +58,22 @@
   border-radius: 5px;
   background: var(--app-surface);
   color: var(--app-text);
+  line-height: 1.45;
+}
+
+.portfolio-manager-message.is-info {
+  border-left-color: #4d8dff;
+  background: color-mix(in srgb, #4d8dff 8%, var(--app-surface));
+}
+
+.portfolio-manager-message.is-error {
+  border-color: color-mix(in srgb, #ff665c 42%, var(--app-border));
+  border-left-color: #ff665c;
+  background: color-mix(in srgb, #ff665c 9%, var(--app-surface));
+}
+
+.portfolio-editor-message {
+  margin: 0 0 1rem;
 }
 
 .portfolio-source-actions {
@@ -615,6 +631,11 @@
 .portfolio-editor-actions button:disabled {
   cursor: wait;
   opacity: 0.58;
+}
+
+.portfolio-editor-actions button {
+  line-height: 1.25;
+  text-align: center;
 }
 
 .spin {

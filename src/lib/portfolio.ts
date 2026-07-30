@@ -86,7 +86,11 @@ export async function fetchPublicPortfolio(
   const url = new URL(endpoint);
   if (options.featured) url.searchParams.set("featured", "true");
   if (options.limit) url.searchParams.set("limit", String(options.limit));
-  const response = await fetch(url, { headers: portfolioHeaders() });
+  url.searchParams.set("_refresh", String(Date.now()));
+  const response = await fetch(url, {
+    headers: portfolioHeaders(),
+    cache: "no-store",
+  });
   if (!response.ok) throw new Error("Não foi possível carregar o portfólio.");
   const payload = (await response.json()) as {
     projects?: PublicPortfolioProject[];
@@ -104,7 +108,11 @@ export async function fetchPublicPortfolioProject(
   if (!endpoint || !supabasePublishableKey) return null;
   const url = new URL(endpoint);
   url.searchParams.set("slug", slug);
-  const response = await fetch(url, { headers: portfolioHeaders() });
+  url.searchParams.set("_refresh", String(Date.now()));
+  const response = await fetch(url, {
+    headers: portfolioHeaders(),
+    cache: "no-store",
+  });
   if (response.status === 404) return null;
   if (!response.ok) throw new Error("Não foi possível carregar este projeto.");
   const payload = (await response.json()) as {
